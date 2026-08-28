@@ -9,15 +9,26 @@ class SessionStore {
       filename: null,
       rawCode: null,
       analysis: null,
+      plan: null,
       updatedAt: null
     };
   }
 
   setAnalysis(filename, rawCode, analysis) {
     this.session = {
+      ...this.session,
       filename,
       rawCode,
       analysis,
+      updatedAt: new Date().toISOString()
+    };
+    return this.session;
+  }
+
+  setPlan(plan) {
+    this.session = {
+      ...this.session,
+      plan,
       updatedAt: new Date().toISOString()
     };
     return this.session;
@@ -32,6 +43,7 @@ class SessionStore {
       filename: null,
       rawCode: null,
       analysis: null,
+      plan: null,
       updatedAt: null
     };
   }

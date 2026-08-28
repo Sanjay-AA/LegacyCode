@@ -43,3 +43,22 @@ export async function analyzeCode(code, filename = 'legacy-component.js') {
 
   return data.analysis;
 }
+
+export async function generatePlan(analysis) {
+  const response = await fetch(`${API_BASE_URL}/plan`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({ analysis })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || `Planning failed with status ${response.status}`);
+  }
+
+  return data.plan;
+}

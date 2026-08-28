@@ -9,7 +9,7 @@ const PIPELINE_STAGES = [
   { id: 'ship', label: '5. Ship', icon: Send, desc: 'Generate modernized React module' }
 ];
 
-export default function PipelineOverview({ currentStage = 'analyze', hasAnalysis = false }) {
+export default function PipelineOverview({ hasAnalysis = false, hasPlan = false, activeTab = 'analyze' }) {
   return (
     <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 mb-8">
       <div className="flex items-center justify-between mb-4">
@@ -25,8 +25,11 @@ export default function PipelineOverview({ currentStage = 'analyze', hasAnalysis
       <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
         {PIPELINE_STAGES.map((stage) => {
           const Icon = stage.icon;
-          const isAnalyze = stage.id === 'analyze';
-          const isDone = isAnalyze && hasAnalysis;
+          const isAnalyzeDone = stage.id === 'analyze' && hasAnalysis;
+          const isPlanDone = stage.id === 'plan' && hasPlan;
+
+          const isDone = isAnalyzeDone || isPlanDone;
+          const isActive = (stage.id === 'analyze' && !hasAnalysis) || (stage.id === 'plan' && hasAnalysis && !hasPlan) || (stage.id === activeTab);
 
           return (
             <div
@@ -34,7 +37,7 @@ export default function PipelineOverview({ currentStage = 'analyze', hasAnalysis
               className={`border rounded-xl p-3.5 relative transition-all ${
                 isDone
                   ? 'bg-emerald-950/20 border-emerald-500/40 opacity-100 shadow-md shadow-emerald-500/5'
-                  : isAnalyze
+                  : isActive
                   ? 'bg-slate-900 border-sky-500/40 opacity-100 shadow-md shadow-sky-500/5'
                   : 'bg-slate-950/40 border-slate-800/80 opacity-50'
               }`}
@@ -43,13 +46,13 @@ export default function PipelineOverview({ currentStage = 'analyze', hasAnalysis
                 <div className={`p-1.5 rounded-lg ${
                   isDone
                     ? 'bg-emerald-500/20 text-emerald-400'
-                    : isAnalyze
+                    : isActive
                     ? 'bg-sky-500/20 text-sky-400'
                     : 'bg-slate-800 text-slate-500'
                 }`}>
                   <Icon className="w-4 h-4" />
                 </div>
-                <span className={`text-xs font-medium ${isDone ? 'text-emerald-300' : isAnalyze ? 'text-sky-300' : 'text-slate-400'}`}>
+                <span className={`text-xs font-medium ${isDone ? 'text-emerald-300' : isActive ? 'text-sky-300' : 'text-slate-400'}`}>
                   {stage.label}
                 </span>
               </div>
@@ -58,11 +61,11 @@ export default function PipelineOverview({ currentStage = 'analyze', hasAnalysis
                 <span className={`text-[10px] uppercase font-mono tracking-wider px-1.5 py-0.5 rounded border ${
                   isDone
                     ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                    : isAnalyze
+                    : isActive
                     ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
                     : 'bg-slate-900 text-slate-400 border-slate-800'
                 }`}>
-                  {isDone ? 'Complete' : isAnalyze ? 'Active' : 'Pending'}
+                  {isDone ? '✓ Complete' : isActive ? '● Active' : '○ Pending'}
                 </span>
               </div>
             </div>
