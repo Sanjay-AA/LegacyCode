@@ -10,6 +10,8 @@ class SessionStore {
       rawCode: null,
       analysis: null,
       plan: null,
+      migratedCode: null,
+      migrationSummary: null,
       updatedAt: null
     };
   }
@@ -34,6 +36,16 @@ class SessionStore {
     return this.session;
   }
 
+  setMigration(migratedCode, summary) {
+    this.session = {
+      ...this.session,
+      migratedCode,
+      migrationSummary: summary,
+      updatedAt: new Date().toISOString()
+    };
+    return this.session;
+  }
+
   getSession() {
     return this.session;
   }
@@ -44,6 +56,8 @@ class SessionStore {
       rawCode: null,
       analysis: null,
       plan: null,
+      migratedCode: null,
+      migrationSummary: null,
       updatedAt: null
     };
   }

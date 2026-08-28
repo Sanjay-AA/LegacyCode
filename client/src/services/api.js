@@ -62,3 +62,22 @@ export async function generatePlan(analysis) {
 
   return data.plan;
 }
+
+export async function performMigrationApi(rawCode, analysis, plan) {
+  const response = await fetch(`${API_BASE_URL}/migrate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({ rawCode, analysis, plan })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || `Migration failed with status ${response.status}`);
+  }
+
+  return data;
+}

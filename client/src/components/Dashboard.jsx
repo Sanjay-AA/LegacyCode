@@ -3,8 +3,9 @@ import PipelineOverview from './PipelineOverview';
 import CodeUploader from './CodeUploader';
 import AnalysisViewer from './AnalysisViewer';
 import PlanViewer from './PlanViewer';
-import { analyzeCode, generatePlan } from '../services/api';
-import { Search, Map } from 'lucide-react';
+import MigrateViewer from './MigrateViewer';
+import { analyzeCode, generatePlan, performMigrationApi } from '../services/api';
+import { Search, Map, Code } from 'lucide-react';
 
 export default function Dashboard() {
   const [code, setCode] = useState('');
@@ -17,13 +18,18 @@ export default function Dashboard() {
   const [plan, setPlan] = useState(null);
   const [planError, setPlanError] = useState('');
 
-  const [activeTab, setActiveTab] = useState('analyze'); // 'analyze' | 'plan'
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrationData, setMigrationData] = useState(null);
+  const [migrationError, setMigrationError] = useState('');
+
+  const [activeTab, setActiveTab] = useState('analyze'); // 'analyze' | 'plan' | 'migrate'
 
   const handleAnalyze = async () => {
     if (!code.trim()) return;
     setIsAnalyzing(true);
     setAnalyzeError('');
-    setPlan(null); // Reset downstream plan on new analysis
+    setPlan(null);
+    setMigrationData(null);
 
     try {
       const result = await analyzeCode(code, filename || 'legacy-component.js');
@@ -41,6 +47,7 @@ export default function Dashboard() {
     if (!analysis) return;
     setIsPlanning(true);
     setPlanError('');
+    setMigrationData(null);
 
     try {
       const planResult = await generatePlan(analysis);
@@ -54,12 +61,30 @@ export default function Dashboard() {
     }
   };
 
+  const handleRunMigration = async () => {
+    if (!code || !analysis || !plan) return;
+    setIsMigrating(true);
+    setMigrationError('');
+
+    try {
+      const migrationRes = await performMigrationApi(code, analysis, plan);
+      setMigrationData(migrationRes);
+      setActiveTab('migrate');
+    } catch (err) {
+      console.error('Migrate stage failed:', err);
+      setMigrationError(err.message || 'Failed to execute code migration');
+    } finally {
+      setIsMigrating(false);
+    }
+  };
+
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* 5-Stage Pipeline Status Overview */}
       <PipelineOverview
         hasAnalysis={!!analysis}
         hasPlan={!!plan}
+        hasMigrated={!!migrationData}
         activeTab={activeTab}
       />
 
@@ -76,33 +101,46 @@ export default function Dashboard() {
           error={analyzeError}
         />
 
-        {/* Right: Results View (Tabbed: Analyze Output vs. Plan Blueprint) */}
+        {/* Right: Results View (Tabbed: Analyze Output vs. Plan Blueprint vs. Migrated Code) */}
         <div className="flex flex-col h-full">
           {/* Result View Tab Selector Header */}
-          <div className="flex items-center space-x-2 mb-3 bg-slate-900/60 p-1 rounded-xl border border-slate-800">
+          <div className="flex items-center space-x-2 mb-3 bg-slate-900/60 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
             <button
               onClick={() => setActiveTab('analyze')}
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center space-x-2 transition-colors ${
+              className={`flex-1 py-2 px-2.5 rounded-lg flex items-center justify-center space-x-1.5 transition-colors ${
                 activeTab === 'analyze'
                   ? 'bg-slate-800 text-sky-400 border border-slate-700/60 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Search className="w-3.5 h-3.5" />
-              <span>1. Analyze Output {analysis ? '✓' : ''}</span>
+              <span>1. Analyze {analysis ? '✓' : ''}</span>
             </button>
 
             <button
               onClick={() => setActiveTab('plan')}
               disabled={!analysis}
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center space-x-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              className={`flex-1 py-2 px-2.5 rounded-lg flex items-center justify-center space-x-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                 activeTab === 'plan'
                   ? 'bg-slate-800 text-sky-400 border border-slate-700/60 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Map className="w-3.5 h-3.5" />
-              <span>2. Migration Plan {plan ? '✓' : ''}</span>
+              <span>2. Plan {plan ? '✓' : ''}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('migrate')}
+              disabled={!plan}
+              className={`flex-1 py-2 px-2.5 rounded-lg flex items-center justify-center space-x-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                activeTab === 'migrate'
+                  ? 'bg-slate-800 text-sky-400 border border-slate-700/60 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Code className="w-3.5 h-3.5" />
+              <span>3. Migrate {migrationData ? '✓' : ''}</span>
             </button>
           </div>
 
@@ -114,7 +152,7 @@ export default function Dashboard() {
                 {analysis && (
                   <div className="mt-3 bg-slate-900/60 border border-slate-800 p-3 rounded-xl flex items-center justify-between">
                     <span className="text-xs text-slate-300">
-                      Analysis complete! Ready for Stage 2.
+                      Analysis complete! Proceed to Stage 2: Plan.
                     </span>
                     <button
                       onClick={handleGeneratePlan}
@@ -127,13 +165,39 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+            ) : activeTab === 'plan' ? (
+              <div className="h-full flex flex-col">
+                <PlanViewer
+                  plan={plan}
+                  onGeneratePlan={handleGeneratePlan}
+                  isPlanning={isPlanning}
+                  planError={planError}
+                  hasAnalysis={!!analysis}
+                />
+                {plan && (
+                  <div className="mt-3 bg-slate-900/60 border border-slate-800 p-3 rounded-xl flex items-center justify-between">
+                    <span className="text-xs text-slate-300">
+                      Plan generated! Proceed to Stage 3: Migrate.
+                    </span>
+                    <button
+                      onClick={handleRunMigration}
+                      disabled={isMigrating}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors flex items-center space-x-1.5 shadow"
+                    >
+                      <Code className="w-3.5 h-3.5" />
+                      <span>Run Code Migration →</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
-              <PlanViewer
-                plan={plan}
-                onGeneratePlan={handleGeneratePlan}
-                isPlanning={isPlanning}
-                planError={planError}
-                hasAnalysis={!!analysis}
+              <MigrateViewer
+                migrationData={migrationData}
+                rawCode={code}
+                onRunMigration={handleRunMigration}
+                isMigrating={isMigrating}
+                migrationError={migrationError}
+                hasPlan={!!plan}
               />
             )}
           </div>
