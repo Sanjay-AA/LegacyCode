@@ -9,7 +9,7 @@ const PIPELINE_STAGES = [
   { id: 'ship', label: '5. Ship', icon: Send, desc: 'Generate modernized React module' }
 ];
 
-export default function PipelineOverview() {
+export default function PipelineOverview({ currentStage = 'analyze', hasAnalysis = false }) {
   return (
     <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 mb-8">
       <div className="flex items-center justify-between mb-4">
@@ -25,21 +25,44 @@ export default function PipelineOverview() {
       <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
         {PIPELINE_STAGES.map((stage) => {
           const Icon = stage.icon;
+          const isAnalyze = stage.id === 'analyze';
+          const isDone = isAnalyze && hasAnalysis;
+
           return (
             <div
               key={stage.id}
-              className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-3.5 relative opacity-60 hover:opacity-80 transition-opacity"
+              className={`border rounded-xl p-3.5 relative transition-all ${
+                isDone
+                  ? 'bg-emerald-950/20 border-emerald-500/40 opacity-100 shadow-md shadow-emerald-500/5'
+                  : isAnalyze
+                  ? 'bg-slate-900 border-sky-500/40 opacity-100 shadow-md shadow-sky-500/5'
+                  : 'bg-slate-950/40 border-slate-800/80 opacity-50'
+              }`}
             >
               <div className="flex items-center space-x-2.5 mb-2">
-                <div className="p-1.5 rounded-lg bg-slate-800 text-slate-400">
+                <div className={`p-1.5 rounded-lg ${
+                  isDone
+                    ? 'bg-emerald-500/20 text-emerald-400'
+                    : isAnalyze
+                    ? 'bg-sky-500/20 text-sky-400'
+                    : 'bg-slate-800 text-slate-500'
+                }`}>
                   <Icon className="w-4 h-4" />
                 </div>
-                <span className="text-xs font-medium text-slate-300">{stage.label}</span>
+                <span className={`text-xs font-medium ${isDone ? 'text-emerald-300' : isAnalyze ? 'text-sky-300' : 'text-slate-400'}`}>
+                  {stage.label}
+                </span>
               </div>
               <p className="text-[11px] text-slate-400 leading-snug">{stage.desc}</p>
               <div className="mt-3 flex items-center justify-between">
-                <span className="text-[10px] uppercase font-mono tracking-wider text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
-                  Pending
+                <span className={`text-[10px] uppercase font-mono tracking-wider px-1.5 py-0.5 rounded border ${
+                  isDone
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    : isAnalyze
+                    ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+                    : 'bg-slate-900 text-slate-400 border-slate-800'
+                }`}>
+                  {isDone ? 'Complete' : isAnalyze ? 'Active' : 'Pending'}
                 </span>
               </div>
             </div>

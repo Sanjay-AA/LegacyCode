@@ -24,3 +24,22 @@ export async function checkHealth() {
     latency
   };
 }
+
+export async function analyzeCode(code, filename = 'legacy-component.js') {
+  const response = await fetch(`${API_BASE_URL}/analyze`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({ code, filename })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || `Analysis failed with status ${response.status}`);
+  }
+
+  return data.analysis;
+}
