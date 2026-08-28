@@ -1,7 +1,24 @@
 import { Router } from 'express';
 import { analyzeJQueryCode } from '../pipeline/analyzer.js';
+import { activeStore } from '../pipeline/store.js';
 
 const router = Router();
+
+/**
+ * GET /api/analyze
+ * Returns current active session analysis if available.
+ */
+router.get('/', (req, res) => {
+  const session = activeStore.getSession();
+  if (!session.analysis) {
+    return res.status(404).json({ error: 'No active analysis found' });
+  }
+  return res.status(200).json({
+    success: true,
+    analysis: session.analysis,
+    updatedAt: session.updatedAt
+  });
+});
 
 /**
  * POST /api/analyze
@@ -17,7 +34,11 @@ router.post('/', (req, res) => {
       });
     }
 
-    const analysis = analyzeJQueryCode(code, filename || 'legacy-component.js');
+    const safeFilename = filename || 'legacy-component.js';
+    const analysis = analyzeJQueryCode(code, safeFilename);
+
+    // Persist in memory for pipeline stages
+    activeStore.setAnalysis(safeFilename, code, analysis);
 
     return res.status(200).json({
       success: true,

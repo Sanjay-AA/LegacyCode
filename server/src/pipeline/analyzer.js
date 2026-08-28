@@ -159,11 +159,18 @@ export function analyzeJQueryCode(code, filename = 'legacy-component.js') {
   const jqueryMethods = Array.from(jqueryMethodsSet);
   const stateVariables = Array.from(stateVariablesSet);
 
+  const fileSizeBytes = Buffer.byteLength(code, 'utf8');
+  const fileSizeFormatted = fileSizeBytes < 1024 
+    ? `${fileSizeBytes} B` 
+    : `${(fileSizeBytes / 1024).toFixed(2)} KB`;
+
   return {
     filename,
+    fileSize: fileSizeFormatted,
+    fileSizeBytes,
     analyzedAt: new Date().toISOString(),
     purpose: inferredPurpose,
-    summary: `Analyzed ${filename}: Found ${selectors.length} DOM selector(s), ${eventHandlers.length} event handler(s), ${domManipulations.length} DOM manipulation(s), and ${jqueryMethods.length} jQuery pattern(s).`,
+    summary: `Analyzed ${filename} (${fileSizeFormatted}): Found ${selectors.length} DOM selector(s), ${eventHandlers.length} event handler(s), ${domManipulations.length} DOM manipulation(s), and ${jqueryMethods.length} jQuery pattern(s).`,
     selectors,
     eventHandlers,
     domManipulations,

@@ -117,8 +117,31 @@ export default function CodeUploader({
     setCode(SAMPLE_JQUERY_CODE);
   };
 
+  // Calculate formatted file size
+  const getFormattedSize = () => {
+    if (!code) return '0 B';
+    const bytes = new Blob([code]).size;
+    if (bytes < 1024) return `${bytes} B`;
+    return `${(bytes / 1024).toFixed(2)} KB`;
+  };
+
   return (
     <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 flex flex-col h-full">
+      {/* Step Flow Progress Bar */}
+      <div className="mb-4 pb-3 border-b border-slate-800/80 flex items-center justify-between text-xs">
+        <div className="flex items-center space-x-2">
+          <span className="font-semibold text-slate-300">Pipeline Flow:</span>
+          <span className={`px-2 py-0.5 rounded font-medium flex items-center gap-1 ${code ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
+            <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+            1. Upload {code ? '✓' : ''}
+          </span>
+          <span className="text-slate-600">→</span>
+          <span className={`px-2 py-0.5 rounded font-medium flex items-center gap-1 ${isAnalyzing ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 animate-pulse' : 'bg-slate-800 text-slate-400 border border-slate-700/50'}`}>
+            2. Analyze
+          </span>
+        </div>
+      </div>
+
       {/* Header Controls */}
       <div className="flex flex-wrap items-center justify-between pb-4 border-b border-slate-800 gap-2 mb-4">
         <div className="flex items-center space-x-2.5">
@@ -126,8 +149,8 @@ export default function CodeUploader({
             <FileCode className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-200">1. Select Legacy jQuery Code</h3>
-            <p className="text-xs text-slate-400">Upload `.js` file or paste source code</p>
+            <h3 className="text-sm font-semibold text-slate-200">Upload Legacy jQuery File</h3>
+            <p className="text-xs text-slate-400">Select `.js` file or paste raw jQuery source code</p>
           </div>
         </div>
 
@@ -143,10 +166,10 @@ export default function CodeUploader({
           <button
             onClick={() => fileInputRef.current?.click()}
             type="button"
-            className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-3 py-1.5 rounded-lg border border-slate-700 transition-colors flex items-center space-x-1.5"
+            className="text-xs bg-sky-600 hover:bg-sky-500 text-white font-medium px-3.5 py-1.5 rounded-lg transition-colors flex items-center space-x-1.5 shadow-sm"
           >
-            <Upload className="w-3.5 h-3.5 text-sky-400" />
-            <span>Upload File</span>
+            <Upload className="w-3.5 h-3.5" />
+            <span>Browse JS File</span>
           </button>
           <input
             ref={fileInputRef}
@@ -167,24 +190,32 @@ export default function CodeUploader({
           dragActive ? 'border-2 border-dashed border-sky-400 bg-sky-950/20' : 'border border-slate-800 bg-slate-950/70'
         }`}
       >
-        {/* Filename Indicator */}
-        <div className="px-4 py-2 border-b border-slate-800/80 bg-slate-900/50 flex items-center justify-between">
-          <span className="text-xs font-mono text-slate-300 flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-            <span>{filename || 'untitled-legacy.js'}</span>
-          </span>
-          {code && (
-            <span className="text-[11px] text-slate-400 font-mono">
-              {code.split('\n').length} lines • {code.length} chars
+        {/* Filename & File Size Indicator Bar */}
+        <div className="px-4 py-2 border-b border-slate-800/80 bg-slate-900/60 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <span className="text-xs font-mono text-slate-200 font-semibold flex items-center space-x-2">
+              <span className={`w-2 h-2 rounded-full ${code ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+              <span>Filename: {filename || 'untitled-legacy.js'}</span>
             </span>
-          )}
+          </div>
+
+          <div className="flex items-center space-x-3 text-[11px] font-mono">
+            <span className="text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700/60">
+              Size: <strong className="text-sky-300 font-bold">{getFormattedSize()}</strong>
+            </span>
+            {code && (
+              <span className="text-slate-400 hidden sm:inline">
+                {code.split('\n').length} lines
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Code Textarea */}
         <textarea
           value={code}
           onChange={(e) => setCode(e.target.value)}
-          placeholder="// Paste legacy jQuery code here, or drop a JS file above..."
+          placeholder="// Drop a legacy .js file above, click 'Browse JS File', or paste code directly..."
           spellCheck={false}
           className="flex-1 w-full bg-transparent p-4 font-mono text-xs text-slate-200 resize-none focus:outline-none focus:ring-1 focus:ring-sky-500/50 leading-relaxed"
         />
