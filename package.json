@@ -1,0 +1,16 @@
+{
+  "name": "legacy-rescue",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Autonomous software modernization agent (jQuery to React)",
+  "scripts": {
+    "start": "npm run start --prefix server",
+    "server": "npm run dev --prefix server",
+    "client": "npm run dev --prefix client",
+    "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "install:all": "npm install --prefix server && npm install --prefix client"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
