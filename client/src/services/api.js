@@ -100,3 +100,23 @@ export async function runVerificationApi(rawCode, analysis, plan, migratedCode) 
 
   return data.verification;
 }
+
+export async function shipMigrationApi() {
+  const response = await fetch(`${API_BASE_URL}/ship`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    }
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    const error = new Error(data.error || `Shipping failed with status ${response.status}`);
+    error.blocked = data.blocked;
+    throw error;
+  }
+
+  return data.shipResult;
+}

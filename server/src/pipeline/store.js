@@ -13,6 +13,7 @@ class SessionStore {
       migratedCode: null,
       migrationSummary: null,
       verificationResult: null,
+      shipResult: null,
       updatedAt: null
     };
   }
@@ -56,6 +57,15 @@ class SessionStore {
     return this.session;
   }
 
+  setShip(shipResult) {
+    this.session = {
+      ...this.session,
+      shipResult,
+      updatedAt: new Date().toISOString()
+    };
+    return this.session;
+  }
+
   getSession() {
     return this.session;
   }
@@ -69,6 +79,7 @@ class SessionStore {
       migratedCode: null,
       migrationSummary: null,
       verificationResult: null,
+      shipResult: null,
       updatedAt: null
     };
   }
