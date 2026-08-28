@@ -4,8 +4,9 @@ import CodeUploader from './CodeUploader';
 import AnalysisViewer from './AnalysisViewer';
 import PlanViewer from './PlanViewer';
 import MigrateViewer from './MigrateViewer';
-import { analyzeCode, generatePlan, performMigrationApi } from '../services/api';
-import { Search, Map, Code } from 'lucide-react';
+import VerifyViewer from './VerifyViewer';
+import { analyzeCode, generatePlan, performMigrationApi, runVerificationApi } from '../services/api';
+import { Search, Map, Code, CheckCircle } from 'lucide-react';
 
 export default function Dashboard() {
   const [code, setCode] = useState('');
@@ -22,7 +23,11 @@ export default function Dashboard() {
   const [migrationData, setMigrationData] = useState(null);
   const [migrationError, setMigrationError] = useState('');
 
-  const [activeTab, setActiveTab] = useState('analyze'); // 'analyze' | 'plan' | 'migrate'
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verification, setVerification] = useState(null);
+  const [verifyError, setVerifyError] = useState('');
+
+  const [activeTab, setActiveTab] = useState('analyze'); // 'analyze' | 'plan' | 'migrate' | 'verify'
 
   const handleAnalyze = async () => {
     if (!code.trim()) return;
@@ -30,6 +35,7 @@ export default function Dashboard() {
     setAnalyzeError('');
     setPlan(null);
     setMigrationData(null);
+    setVerification(null);
 
     try {
       const result = await analyzeCode(code, filename || 'legacy-component.js');
@@ -48,6 +54,7 @@ export default function Dashboard() {
     setIsPlanning(true);
     setPlanError('');
     setMigrationData(null);
+    setVerification(null);
 
     try {
       const planResult = await generatePlan(analysis);
@@ -65,6 +72,7 @@ export default function Dashboard() {
     if (!code || !analysis || !plan) return;
     setIsMigrating(true);
     setMigrationError('');
+    setVerification(null);
 
     try {
       const migrationRes = await performMigrationApi(code, analysis, plan);
@@ -78,6 +86,28 @@ export default function Dashboard() {
     }
   };
 
+  const handleRunVerification = async () => {
+    if (!code || !analysis || !plan || !migrationData) return;
+    setIsVerifying(true);
+    setVerifyError('');
+
+    try {
+      const verificationRes = await runVerificationApi(
+        code,
+        analysis,
+        plan,
+        migrationData.migratedCode
+      );
+      setVerification(verificationRes);
+      setActiveTab('verify');
+    } catch (err) {
+      console.error('Verify stage failed:', err);
+      setVerifyError(err.message || 'Failed to run behavioral verification');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* 5-Stage Pipeline Status Overview */}
@@ -85,6 +115,7 @@ export default function Dashboard() {
         hasAnalysis={!!analysis}
         hasPlan={!!plan}
         hasMigrated={!!migrationData}
+        hasVerified={!!verification}
         activeTab={activeTab}
       />
 
@@ -101,13 +132,13 @@ export default function Dashboard() {
           error={analyzeError}
         />
 
-        {/* Right: Results View (Tabbed: Analyze Output vs. Plan Blueprint vs. Migrated Code) */}
+        {/* Right: Results View (Tabbed Pipeline Outputs) */}
         <div className="flex flex-col h-full">
           {/* Result View Tab Selector Header */}
-          <div className="flex items-center space-x-2 mb-3 bg-slate-900/60 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
+          <div className="flex items-center space-x-1.5 mb-3 bg-slate-900/60 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
             <button
               onClick={() => setActiveTab('analyze')}
-              className={`flex-1 py-2 px-2.5 rounded-lg flex items-center justify-center space-x-1.5 transition-colors ${
+              className={`flex-1 py-2 px-2 rounded-lg flex items-center justify-center space-x-1 transition-colors ${
                 activeTab === 'analyze'
                   ? 'bg-slate-800 text-sky-400 border border-slate-700/60 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -120,7 +151,7 @@ export default function Dashboard() {
             <button
               onClick={() => setActiveTab('plan')}
               disabled={!analysis}
-              className={`flex-1 py-2 px-2.5 rounded-lg flex items-center justify-center space-x-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              className={`flex-1 py-2 px-2 rounded-lg flex items-center justify-center space-x-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                 activeTab === 'plan'
                   ? 'bg-slate-800 text-sky-400 border border-slate-700/60 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -133,7 +164,7 @@ export default function Dashboard() {
             <button
               onClick={() => setActiveTab('migrate')}
               disabled={!plan}
-              className={`flex-1 py-2 px-2.5 rounded-lg flex items-center justify-center space-x-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              className={`flex-1 py-2 px-2 rounded-lg flex items-center justify-center space-x-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                 activeTab === 'migrate'
                   ? 'bg-slate-800 text-sky-400 border border-slate-700/60 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -141,6 +172,19 @@ export default function Dashboard() {
             >
               <Code className="w-3.5 h-3.5" />
               <span>3. Migrate {migrationData ? '✓' : ''}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('verify')}
+              disabled={!migrationData}
+              className={`flex-1 py-2 px-2 rounded-lg flex items-center justify-center space-x-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                activeTab === 'verify'
+                  ? 'bg-slate-800 text-emerald-400 border border-slate-700/60 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <CheckCircle className="w-3.5 h-3.5" />
+              <span>4. Verify {verification ? '✓' : ''}</span>
             </button>
           </div>
 
@@ -190,14 +234,39 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+            ) : activeTab === 'migrate' ? (
+              <div className="h-full flex flex-col">
+                <MigrateViewer
+                  migrationData={migrationData}
+                  rawCode={code}
+                  onRunMigration={handleRunMigration}
+                  isMigrating={isMigrating}
+                  migrationError={migrationError}
+                  hasPlan={!!plan}
+                />
+                {migrationData && (
+                  <div className="mt-3 bg-slate-900/60 border border-slate-800 p-3 rounded-xl flex items-center justify-between">
+                    <span className="text-xs text-slate-300">
+                      Code migration complete! Proceed to Stage 4: Verify.
+                    </span>
+                    <button
+                      onClick={handleRunVerification}
+                      disabled={isVerifying}
+                      className="bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors flex items-center space-x-1.5 shadow"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span>Run Verification Stage →</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
-              <MigrateViewer
-                migrationData={migrationData}
-                rawCode={code}
-                onRunMigration={handleRunMigration}
-                isMigrating={isMigrating}
-                migrationError={migrationError}
-                hasPlan={!!plan}
+              <VerifyViewer
+                verification={verification}
+                onRunVerification={handleRunVerification}
+                isVerifying={isVerifying}
+                verifyError={verifyError}
+                hasMigrated={!!migrationData}
               />
             )}
           </div>

@@ -12,6 +12,7 @@ class SessionStore {
       plan: null,
       migratedCode: null,
       migrationSummary: null,
+      verificationResult: null,
       updatedAt: null
     };
   }
@@ -46,6 +47,15 @@ class SessionStore {
     return this.session;
   }
 
+  setVerification(verificationResult) {
+    this.session = {
+      ...this.session,
+      verificationResult,
+      updatedAt: new Date().toISOString()
+    };
+    return this.session;
+  }
+
   getSession() {
     return this.session;
   }
@@ -58,6 +68,7 @@ class SessionStore {
       plan: null,
       migratedCode: null,
       migrationSummary: null,
+      verificationResult: null,
       updatedAt: null
     };
   }

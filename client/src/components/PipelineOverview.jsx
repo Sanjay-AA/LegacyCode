@@ -9,7 +9,7 @@ const PIPELINE_STAGES = [
   { id: 'ship', label: '5. Ship', icon: Send, desc: 'Generate modernized React module' }
 ];
 
-export default function PipelineOverview({ hasAnalysis = false, hasPlan = false, hasMigrated = false, activeTab = 'analyze' }) {
+export default function PipelineOverview({ hasAnalysis = false, hasPlan = false, hasMigrated = false, hasVerified = false, activeTab = 'analyze' }) {
   return (
     <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 mb-8">
       <div className="flex items-center justify-between mb-4">
@@ -28,12 +28,14 @@ export default function PipelineOverview({ hasAnalysis = false, hasPlan = false,
           const isAnalyzeDone = stage.id === 'analyze' && hasAnalysis;
           const isPlanDone = stage.id === 'plan' && hasPlan;
           const isMigrateDone = stage.id === 'migrate' && hasMigrated;
+          const isVerifyDone = stage.id === 'verify' && hasVerified;
 
-          const isDone = isAnalyzeDone || isPlanDone || isMigrateDone;
+          const isDone = isAnalyzeDone || isPlanDone || isMigrateDone || isVerifyDone;
           const isActive = stage.id === activeTab ||
             (stage.id === 'analyze' && !hasAnalysis) ||
             (stage.id === 'plan' && hasAnalysis && !hasPlan) ||
-            (stage.id === 'migrate' && hasPlan && !hasMigrated);
+            (stage.id === 'migrate' && hasPlan && !hasMigrated) ||
+            (stage.id === 'verify' && hasMigrated && !hasVerified);
 
           return (
             <div

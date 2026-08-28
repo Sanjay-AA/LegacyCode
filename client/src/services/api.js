@@ -81,3 +81,22 @@ export async function performMigrationApi(rawCode, analysis, plan) {
 
   return data;
 }
+
+export async function runVerificationApi(rawCode, analysis, plan, migratedCode) {
+  const response = await fetch(`${API_BASE_URL}/verify`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({ rawCode, analysis, plan, migratedCode })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || `Verification failed with status ${response.status}`);
+  }
+
+  return data.verification;
+}
