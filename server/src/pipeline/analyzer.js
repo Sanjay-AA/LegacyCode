@@ -1,6 +1,7 @@
 /**
  * Legacy Rescue - jQuery Code Analyzer Module
- * Analyzes jQuery source code to produce structured JSON metadata for migration planning.
+ * Analyzes jQuery source code to produce structured JSON metadata,
+ * Legacy Code Health Report, Migration Risk Assessment, and Behavioral Contract.
  */
 
 export function analyzeJQueryCode(code, filename = 'legacy-component.js') {
@@ -15,7 +16,6 @@ export function analyzeJQueryCode(code, filename = 'legacy-component.js') {
   const selectorsSet = new Set();
   let match;
   while ((match = selectorRegex.exec(cleanCode)) !== null) {
-    // Exclude HTML creation tags like '<div>' or document/window
     const sel = match[1].trim();
     if (!sel.startsWith('<') && sel !== 'document' && sel !== 'window') {
       selectorsSet.add(sel);
@@ -42,10 +42,8 @@ export function analyzeJQueryCode(code, filename = 'legacy-component.js') {
 
   // 3. Detect Event Handlers
   const eventHandlers = [];
-  // Pattern 1: $('.btn').on('click', ...) or $('.btn').click(...)
   const eventNames = ['click', 'submit', 'change', 'keyup', 'keydown', 'blur', 'focus', 'hover', 'input'];
   eventNames.forEach(evt => {
-    // .on('click', ...)
     const onRegex = new RegExp(`(?:\\$|jQuery)\\s*\\(\\s*['"\`]([^'"\`]+)['"\`]\\s*\\)\\s*\\.on\\s*\\(\\s*['"\`]${evt}['"\`]`, 'g');
     while ((match = onRegex.exec(cleanCode)) !== null) {
       eventHandlers.push({
@@ -54,7 +52,6 @@ export function analyzeJQueryCode(code, filename = 'legacy-component.js') {
         description: `Handles ${evt} on selector "${match[1]}"`
       });
     }
-    // .click(function...)
     const shorthandRegex = new RegExp(`(?:\\$|jQuery)\\s*\\(\\s*['"\`]([^'"\`]+)['"\`]\\s*\\)\\s*\\.${evt}\\s*\\(`, 'g');
     while ((match = shorthandRegex.exec(cleanCode)) !== null) {
       if (!eventHandlers.some(e => e.event === evt && e.selector === match[1])) {
@@ -81,12 +78,12 @@ export function analyzeJQueryCode(code, filename = 'legacy-component.js') {
     }
   });
 
-  // 5. Detect State-like variables (var, let, const in scope or window globals)
+  // 5. Detect State-like variables
   const varRegex = /(?:var|let|const)\s+([a-zA-Z0-9_$]+)\s*=/g;
   const stateVariablesSet = new Set();
   while ((match = varRegex.exec(cleanCode)) !== null) {
     const vName = match[1];
-    if (!['$ele', 'self', 'that', 'e', 'evt', 'event', 'i', 'err', 'response', 'data'].includes(vName)) {
+    if (!['$ele', '$input', '$this', 'self', 'that', 'e', 'evt', 'event', 'i', 'err', 'response', 'data'].includes(vName)) {
       stateVariablesSet.add(vName);
     }
   }
@@ -98,7 +95,7 @@ export function analyzeJQueryCode(code, filename = 'legacy-component.js') {
     const methodMatch = cleanCode.match(/(?:type|method)\s*:\s*['"`]([^'"`]+)['"`]/i);
     ajaxCalls.push({
       type: (methodMatch && methodMatch[1]) ? methodMatch[1].toUpperCase() : (cleanCode.includes('$.post') ? 'POST' : 'GET/POST'),
-      url: (urlMatch && urlMatch[1]) ? urlMatch[1] : 'Dynamic / Parameterized Endpoint',
+      url: (urlMatch && urlMatch[1]) ? urlMatch[1] : 'Dynamic Endpoint',
       dataType: cleanCode.match(/dataType\s*:\s*['"`]([^'"`]+)['"`]/)?.[1] || 'json'
     });
   }
@@ -115,49 +112,121 @@ export function analyzeJQueryCode(code, filename = 'legacy-component.js') {
     localStorageUsage.push('Uses sessionStorage');
   }
 
-  // 8. Detect User Interactions & Purpose Summary
-  const userInteractions = new Set();
-  eventHandlers.forEach(h => {
-    if (h.event === 'click') userInteractions.add('Click interaction');
-    if (h.event === 'submit') userInteractions.add('Form submission');
-    if (h.event === 'change' || h.event === 'input') userInteractions.add('Form input modification');
-    if (h.event === 'keyup' || h.event === 'keydown') userInteractions.add('Keyboard input');
-  });
-
-  // Infer purpose
-  let inferredPurpose = 'Interactive UI component';
-  if (eventHandlers.some(h => h.event === 'submit') || cleanCode.includes('val()')) {
-    inferredPurpose = 'Form input processing & submission component';
-  } else if (domManipulations.some(m => ['fadeIn', 'fadeOut', 'hide', 'show', 'toggleClass'].includes(m.method))) {
-    inferredPurpose = 'Interactive toggle / modal / visibility component';
-  } else if (ajaxCalls.length > 0) {
-    inferredPurpose = 'Data-fetching interactive widget';
-  }
-
-  // 9. External Dependencies
-  const dependencies = ['jQuery'];
-  if (cleanCode.includes('bootstrap') || cleanCode.includes('modal(')) dependencies.push('Bootstrap UI');
-  if (cleanCode.includes('moment(')) dependencies.push('Moment.js');
-  if (cleanCode.includes('lodash') || cleanCode.includes('_.')) dependencies.push('Lodash');
-
-  // 10. Behavioral Rules Summary
-  const behavioralRules = [];
-  if (cleanCode.includes('preventDefault')) {
-    behavioralRules.push('Suppresses default browser event actions (e.g. form reload)');
-  }
-  if (domManipulations.some(d => d.method === 'addClass' || d.method === 'removeClass')) {
-    behavioralRules.push('Updates DOM element class states based on user actions');
-  }
-  if (ajaxCalls.length > 0) {
-    behavioralRules.push('Performs async HTTP communication with backend API');
-  }
-  if (stateVariablesSet.size > 0) {
-    behavioralRules.push(`Maintains ${stateVariablesSet.size} local state variable(s) across operations`);
-  }
-
   const selectors = Array.from(selectorsSet);
   const jqueryMethods = Array.from(jqueryMethodsSet);
   const stateVariables = Array.from(stateVariablesSet);
+
+  // 8. Deterministic Legacy Health & Risk Assessment
+  let riskScore = 100; // 100 = cleanest state
+  const risks = [];
+
+  if (domManipulations.length > 0) {
+    const penalty = Math.min(30, domManipulations.length * 3);
+    riskScore -= penalty;
+    risks.push({
+      severity: domManipulations.length > 5 ? 'high' : 'medium',
+      title: 'Heavy Direct DOM Manipulation',
+      description: `Detected ${domManipulations.length} imperative DOM mutations bypassing React's virtual DOM.`
+    });
+  }
+
+  if (stateVariables.length > 0) {
+    const penalty = Math.min(25, stateVariables.length * 5);
+    riskScore -= penalty;
+    risks.push({
+      severity: stateVariables.length > 3 ? 'high' : 'medium',
+      title: 'Global / Implicit Mutable State',
+      description: `Component holds ${stateVariables.length} mutable variable(s) outside declarative React hooks.`
+    });
+  }
+
+  if (eventHandlers.length > 0) {
+    const penalty = Math.min(20, eventHandlers.length * 3);
+    riskScore -= penalty;
+    risks.push({
+      severity: 'medium',
+      title: 'Imperative Event Handlers',
+      description: `Detected ${eventHandlers.length} jQuery event listener(s) requiring synthetic React event binding.`
+    });
+  }
+
+  if (ajaxCalls.length > 0) {
+    riskScore -= 15;
+    risks.push({
+      severity: 'medium',
+      title: 'Asynchronous Network Operations',
+      description: `Contains $.ajax / network calls that need conversion to modern async fetch with state synchronization.`
+    });
+  }
+
+  const dependencies = ['jQuery'];
+  if (cleanCode.includes('bootstrap') || cleanCode.includes('modal(')) dependencies.push('Bootstrap UI');
+  if (cleanCode.includes('moment(')) dependencies.push('Moment.js');
+
+  if (dependencies.length > 1) {
+    riskScore -= 10;
+    risks.push({
+      severity: 'medium',
+      title: 'External Plugin Coupling',
+      description: `Depends on external libraries [${dependencies.slice(1).join(', ')}] that must be replaced with native React code.`
+    });
+  }
+
+  const finalRiskScore = Math.max(15, Math.min(100, riskScore));
+  const healthOverall = finalRiskScore >= 80 ? 'Low Risk' : finalRiskScore >= 50 ? 'Medium Risk' : 'High Risk';
+  const riskLevel = finalRiskScore >= 80 ? 'LOW' : finalRiskScore >= 50 ? 'MEDIUM' : 'HIGH';
+
+  const health = {
+    overall: healthOverall,
+    score: finalRiskScore,
+    riskLevel
+  };
+
+  const patternCounts = {
+    domManipulation: domManipulations.length,
+    eventHandlers: eventHandlers.length,
+    globalVariables: stateVariables.length,
+    ajaxCalls: ajaxCalls.length
+  };
+
+  // 9. Behavioral Contract Generation
+  const initialContractState = {};
+  stateVariables.forEach(v => {
+    if (/count|total|qty|price|num/i.test(v)) initialContractState[v] = 0;
+    else if (/is|has|show|active|flag/i.test(v)) initialContractState[v] = false;
+    else initialContractState[v] = '';
+  });
+
+  const behaviors = [];
+  eventHandlers.forEach(h => {
+    let expectedDesc = `Triggers state transition or handler logic for ${h.selector}`;
+    if (h.selector.includes('qty-plus') || h.selector.includes('increment')) {
+      expectedDesc = 'Increments count / quantity by 1';
+    } else if (h.selector.includes('qty-minus') || h.selector.includes('decrement')) {
+      expectedDesc = 'Decrements count / quantity by 1 (minimum threshold enforced)';
+    } else if (h.selector.includes('coupon') || h.event === 'submit') {
+      expectedDesc = 'Validates input, fires async network request, and updates feedback banner';
+    }
+
+    behaviors.push({
+      action: `${h.event} interaction on "${h.selector}"`,
+      expected: expectedDesc
+    });
+  });
+
+  const behavioralContract = {
+    component: filename.replace(/\.[^/.]+$/, ''),
+    initialState: initialContractState,
+    behaviors: behaviors.length > 0 ? behaviors : [
+      { action: 'Render component on mount', expected: 'Initializes state and mounts clean UI without DOM side effects' }
+    ],
+    rules: [
+      'Preserve initial component state defaults',
+      'Preserve user interaction handlers and state transitions',
+      'Preserve boundary condition clamps (e.g., minimum item count)',
+      'Preserve async API request handling and feedback banners'
+    ]
+  };
 
   const fileSizeBytes = Buffer.byteLength(code, 'utf8');
   const fileSizeFormatted = fileSizeBytes < 1024 
@@ -169,17 +238,24 @@ export function analyzeJQueryCode(code, filename = 'legacy-component.js') {
     fileSize: fileSizeFormatted,
     fileSizeBytes,
     analyzedAt: new Date().toISOString(),
-    purpose: inferredPurpose,
-    summary: `Analyzed ${filename} (${fileSizeFormatted}): Found ${selectors.length} DOM selector(s), ${eventHandlers.length} event handler(s), ${domManipulations.length} DOM manipulation(s), and ${jqueryMethods.length} jQuery pattern(s).`,
+    purpose: 'Interactive jQuery component targeted for React modernization',
+    summary: `Analyzed ${filename} (${fileSizeFormatted}): Detected Health Score ${finalRiskScore}/100 (${healthOverall}). Found ${selectors.length} DOM selector(s), ${eventHandlers.length} event handler(s), ${domManipulations.length} DOM manipulation(s).`,
     selectors,
     eventHandlers,
     domManipulations,
     stateVariables,
     jqueryMethods,
-    userInteractions: Array.from(userInteractions),
     dependencies,
     ajaxCalls,
     localStorageUsage,
-    behavioralRules
+    health,
+    patterns: patternCounts,
+    risks,
+    behavioralContract,
+    riskAssessmentBefore: {
+      score: finalRiskScore,
+      level: riskLevel,
+      reasons: risks.map(r => r.title)
+    }
   };
 }

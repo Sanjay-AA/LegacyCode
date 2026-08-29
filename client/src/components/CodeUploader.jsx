@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileCode, Play, AlertCircle, RefreshCw, Sparkles, Check } from 'lucide-react';
+import { Upload, FileCode, AlertCircle, Sparkles, Play, ArrowRight } from 'lucide-react';
 
 const SAMPLE_JQUERY_CODE = `// Legacy User Signup & Preferences jQuery Component
 $(document).ready(function() {
@@ -64,23 +64,24 @@ $(document).ready(function() {
 });`;
 
 export default function CodeUploader({
-  code,
-  setCode,
-  filename,
-  setFilename,
-  onAnalyze,
-  isAnalyzing,
-  error
+  onUpload,
+  isProcessing = false,
+  error = null
 }) {
   const fileInputRef = useRef(null);
   const [dragActive, setDragActive] = useState(false);
+  const [pastedCode, setPastedCode] = useState('');
+  const [customFilename, setCustomFilename] = useState('legacy-component.js');
 
   const handleFile = (file) => {
     if (!file) return;
-    setFilename(file.name);
+    const filename = file.name;
     const reader = new FileReader();
     reader.onload = (e) => {
-      setCode(e.target.result || '');
+      const codeContent = e.target.result || '';
+      if (codeContent.trim() && onUpload) {
+        onUpload(codeContent, filename);
+      }
     };
     reader.readAsText(file);
   };
@@ -112,150 +113,130 @@ export default function CodeUploader({
     }
   };
 
-  const loadSample = () => {
-    setFilename('legacy-modal-signup.js');
-    setCode(SAMPLE_JQUERY_CODE);
+  const handleLoadSample = () => {
+    if (onUpload) {
+      onUpload(SAMPLE_JQUERY_CODE, 'legacy-signup.js');
+    }
   };
 
-  // Calculate formatted file size
-  const getFormattedSize = () => {
-    if (!code) return '0 B';
-    const bytes = new Blob([code]).size;
-    if (bytes < 1024) return `${bytes} B`;
-    return `${(bytes / 1024).toFixed(2)} KB`;
+  const handleStartPasted = () => {
+    if (pastedCode.trim() && onUpload) {
+      onUpload(pastedCode, customFilename || 'legacy-component.js');
+    }
   };
 
   return (
-    <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 flex flex-col h-full">
-      {/* Step Flow Progress Bar */}
-      <div className="mb-4 pb-3 border-b border-slate-800/80 flex items-center justify-between text-xs">
-        <div className="flex items-center space-x-2">
-          <span className="font-semibold text-slate-300">Pipeline Flow:</span>
-          <span className={`px-2 py-0.5 rounded font-medium flex items-center gap-1 ${code ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-            1. Upload {code ? '✓' : ''}
-          </span>
-          <span className="text-slate-600">→</span>
-          <span className={`px-2 py-0.5 rounded font-medium flex items-center gap-1 ${isAnalyzing ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 animate-pulse' : 'bg-slate-800 text-slate-400 border border-slate-700/50'}`}>
-            2. Analyze
-          </span>
-        </div>
-      </div>
-
-      {/* Header Controls */}
-      <div className="flex flex-wrap items-center justify-between pb-4 border-b border-slate-800 gap-2 mb-4">
-        <div className="flex items-center space-x-2.5">
-          <div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
-            <FileCode className="w-4 h-4" />
+    <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 flex flex-col h-full max-w-4xl mx-auto shadow-xl">
+      {/* Header Banner */}
+      <div className="flex flex-wrap items-center justify-between pb-4 border-b border-slate-800 gap-3 mb-6">
+        <div className="flex items-center space-x-3">
+          <div className="p-2 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400">
+            <Upload className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-200">Upload Legacy jQuery File</h3>
-            <p className="text-xs text-slate-400">Select `.js` file or paste raw jQuery source code</p>
+            <h3 className="text-base font-semibold text-slate-100">Upload Legacy jQuery Component</h3>
+            <p className="text-xs text-slate-400">
+              Uploading a file automatically triggers the 5-stage modernization pipeline.
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={loadSample}
-            type="button"
-            className="text-xs bg-slate-800 hover:bg-slate-700/80 text-amber-300 font-medium px-3 py-1.5 rounded-lg border border-slate-700 transition-colors flex items-center space-x-1.5"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Load Sample</span>
-          </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            type="button"
-            className="text-xs bg-sky-600 hover:bg-sky-500 text-white font-medium px-3.5 py-1.5 rounded-lg transition-colors flex items-center space-x-1.5 shadow-sm"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Browse JS File</span>
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".js,.javascript,.txt"
-            onChange={handleFileInputChange}
-            className="hidden"
-          />
-        </div>
+        <button
+          onClick={handleLoadSample}
+          type="button"
+          disabled={isProcessing}
+          className="text-xs bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-semibold px-3.5 py-2 rounded-xl border border-amber-500/20 transition-all flex items-center space-x-1.5 shadow-sm"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>Load Sample jQuery Component</span>
+        </button>
       </div>
 
-      {/* Drag & Drop Zone or Editor */}
+      {/* Main Drag & Drop Zone */}
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`flex-1 flex flex-col relative rounded-xl transition-all ${
-          dragActive ? 'border-2 border-dashed border-sky-400 bg-sky-950/20' : 'border border-slate-800 bg-slate-950/70'
+        onClick={() => fileInputRef.current?.click()}
+        className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all mb-6 ${
+          dragActive
+            ? 'border-sky-400 bg-sky-950/30'
+            : 'border-slate-700/80 bg-slate-950/60 hover:border-slate-600 hover:bg-slate-950/90'
         }`}
       >
-        {/* Filename & File Size Indicator Bar */}
-        <div className="px-4 py-2 border-b border-slate-800/80 bg-slate-900/60 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <span className="text-xs font-mono text-slate-200 font-semibold flex items-center space-x-2">
-              <span className={`w-2 h-2 rounded-full ${code ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
-              <span>Filename: {filename || 'untitled-legacy.js'}</span>
-            </span>
-          </div>
-
-          <div className="flex items-center space-x-3 text-[11px] font-mono">
-            <span className="text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700/60">
-              Size: <strong className="text-sky-300 font-bold">{getFormattedSize()}</strong>
-            </span>
-            {code && (
-              <span className="text-slate-400 hidden sm:inline">
-                {code.split('\n').length} lines
-              </span>
-            )}
-          </div>
+        <div className="p-4 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-sky-400 mb-3">
+          <FileCode className="w-8 h-8" />
         </div>
 
-        {/* Code Textarea */}
-        <textarea
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          placeholder="// Drop a legacy .js file above, click 'Browse JS File', or paste code directly..."
-          spellCheck={false}
-          className="flex-1 w-full bg-transparent p-4 font-mono text-xs text-slate-200 resize-none focus:outline-none focus:ring-1 focus:ring-sky-500/50 leading-relaxed"
+        <h4 className="text-sm font-semibold text-slate-200 mb-1">
+          Drag & Drop your `.js` jQuery file here
+        </h4>
+        <p className="text-xs text-slate-400 max-w-sm mb-4">
+          Select a legacy JavaScript file to begin autonomous migration.
+        </p>
+
+        <button
+          type="button"
+          disabled={isProcessing}
+          className="bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold px-5 py-2.5 rounded-xl shadow-lg shadow-sky-500/20 transition-all flex items-center space-x-2"
+        >
+          <Upload className="w-4 h-4" />
+          <span>Browse File</span>
+        </button>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".js,.javascript,.txt"
+          onChange={handleFileInputChange}
+          className="hidden"
         />
       </div>
 
-      {/* Error Banner */}
+      {/* Alternative Paste Code Section */}
+      <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold text-slate-300">
+            Or Paste Legacy jQuery Code Directly:
+          </label>
+          <input
+            type="text"
+            value={customFilename}
+            onChange={(e) => setCustomFilename(e.target.value)}
+            placeholder="Filename (e.g. counter.js)"
+            className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200 font-mono focus:outline-none focus:border-sky-500"
+          />
+        </div>
+
+        <textarea
+          value={pastedCode}
+          onChange={(e) => setPastedCode(e.target.value)}
+          placeholder="// Paste legacy jQuery code here..."
+          rows={5}
+          spellCheck={false}
+          className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 font-mono text-xs text-slate-200 resize-none focus:outline-none focus:border-sky-500/50"
+        />
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleStartPasted}
+            disabled={!pastedCode.trim() || isProcessing}
+            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all flex items-center space-x-1.5 shadow-md"
+          >
+            <span>Start Autonomous Migration</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Error Message if Any */}
       {error && (
-        <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-start space-x-2.5 text-xs text-rose-300">
+        <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-start space-x-2 text-xs text-rose-300">
           <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-semibold">Analysis Error</p>
-            <p className="text-rose-400/90">{error}</p>
-          </div>
+          <span>{error}</span>
         </div>
       )}
-
-      {/* Action Footer */}
-      <div className="mt-4 flex items-center justify-between">
-        <span className="text-xs text-slate-400">
-          Target Engine: <strong className="text-slate-300 font-mono">AST & Pattern Extraction</strong>
-        </span>
-
-        <button
-          onClick={onAnalyze}
-          disabled={!code.trim() || isAnalyzing}
-          className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold px-5 py-2.5 rounded-xl shadow-lg shadow-sky-500/20 flex items-center space-x-2 transition-all"
-        >
-          {isAnalyzing ? (
-            <>
-              <RefreshCw className="w-4 h-4 animate-spin" />
-              <span>Analyzing Code...</span>
-            </>
-          ) : (
-            <>
-              <Play className="w-4 h-4 fill-current" />
-              <span>Run Analyze Stage</span>
-            </>
-          )}
-        </button>
-      </div>
     </div>
   );
 }

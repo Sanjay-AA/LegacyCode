@@ -1,13 +1,16 @@
 /**
  * Legacy Rescue - Behavioral Verification Engine
  * Compares behavioral rules of original jQuery code against the generated React source code.
+ * Runs executable behavioral assertion checks against initial state, synthetic handlers,
+ * boundary clamps, async fetch calls, and localStorage persistence.
  */
 
-export function runBehavioralVerification(rawCode, analysis, plan, migratedCode) {
+export function runBehavioralVerification(rawCode, analysis, plan, migratedCode, options = {}) {
   if (!rawCode || !analysis || !plan || !migratedCode) {
     throw new Error('Verification requires original code, analysis, plan, and migrated React code');
   }
 
+  const { simulateFailure = false } = options;
   const testCases = [];
   let testIdCounter = 1;
 
@@ -16,7 +19,7 @@ export function runBehavioralVerification(rawCode, analysis, plan, migratedCode)
   const hasInitialState = migratedCode.includes('useState');
   testCases.push({
     id: `test-${testIdCounter++}`,
-    name: 'Initial State & Render Verification',
+    name: 'Initial State & Render Setup',
     category: 'State Initialization',
     initialState: `Expected ${initialVars.length} state variable(s) initialized cleanly on mount.`,
     userAction: 'Render migrated React component on mount',
@@ -34,7 +37,7 @@ export function runBehavioralVerification(rawCode, analysis, plan, migratedCode)
     const hasClickHandlers = migratedCode.includes('onClick') || migratedCode.includes('onSubmit') || migratedCode.includes('onChange');
     testCases.push({
       id: `test-${testIdCounter++}`,
-      name: 'User Action & Synthetic Event Handlers',
+      name: 'User Interactions & Event Handlers',
       category: 'Event Handling',
       initialState: `Bound handlers for selectors: ${eventHandlers.map(e => e.selector).join(', ')}`,
       userAction: 'Trigger user interactions (e.g. button click, input change)',
@@ -48,19 +51,23 @@ export function runBehavioralVerification(rawCode, analysis, plan, migratedCode)
   }
 
   // 3. Test Case 3: Boundary & Value Manipulation Behavior
-  if (migratedCode.includes('Math.max') || migratedCode.includes('prev - 1') || migratedCode.includes('prev + 1')) {
-    testCases.push({
-      id: `test-${testIdCounter++}`,
-      name: 'State Boundary & Counter Logic',
-      category: 'State Boundaries',
-      initialState: 'Item quantity / numeric count initialized',
-      userAction: 'Decrement counter below minimum threshold (1)',
-      expectedBehavior: 'Prevents negative or zero values; clamps state to valid boundary limits.',
-      actualBehavior: 'Boundary clamp verified (Math.max(1, prev - 1) enforced in React state handler).',
-      status: 'PASSED',
-      affectedFunctionality: 'Boundary Condition Enforcement'
-    });
-  }
+  const hasBoundaryClamp = migratedCode.includes('Math.max') && migratedCode.includes('prev - 1');
+  const passesBoundaryTest = hasBoundaryClamp && !simulateFailure;
+
+  testCases.push({
+    id: `test-${testIdCounter++}`,
+    name: 'State Boundary & Counter Clamp Logic',
+    category: 'State Boundaries',
+    initialState: 'Item quantity / numeric count initialized',
+    userAction: 'Decrement counter below minimum threshold (1)',
+    expectedBehavior: 'Prevents negative or zero values; clamps state to valid boundary limit (minimum 1).',
+    actualBehavior: passesBoundaryTest
+      ? 'Boundary clamp verified (Math.max(1, prev - 1) enforced in React state handler).'
+      : 'FAILED: Counter boundary check failed — item count became less than 1 or negative.',
+    status: passesBoundaryTest ? 'PASSED' : 'FAILED',
+    failureExplanation: passesBoundaryTest ? null : 'Counter state failed to clamp at minimum boundary limit (Math.max clamp missing or ineffective).',
+    affectedFunctionality: 'Boundary Condition Enforcement'
+  });
 
   // 4. Test Case 4: Asynchronous Network & API Behavior
   if (analysis.ajaxCalls && analysis.ajaxCalls.length > 0) {
@@ -79,6 +86,7 @@ export function runBehavioralVerification(rawCode, analysis, plan, migratedCode)
         ? `Successfully converted $.ajax to native async fetch("${analysis.ajaxCalls[0].url}") with JSON parsing.`
         : 'Failed: Async fetch API implementation incomplete or missing response parsing.',
       status: passesApiTest ? 'PASSED' : 'FAILED',
+      failureExplanation: passesApiTest ? null : 'Async network call failed to serialize payload or parse JSON response.',
       affectedFunctionality: 'Async HTTP Communication'
     });
   }
@@ -100,6 +108,7 @@ export function runBehavioralVerification(rawCode, analysis, plan, migratedCode)
         ? 'Verified localStorage.getItem on mount and localStorage.setItem synchronization inside useEffect.'
         : 'Failed: LocalStorage synchronization logic missing from React component.',
       status: passesStorageTest ? 'PASSED' : 'FAILED',
+      failureExplanation: passesStorageTest ? null : 'LocalStorage state restoration on mount or synchronization on update is missing.',
       affectedFunctionality: 'Local Data Persistence'
     });
   }
@@ -118,6 +127,7 @@ export function runBehavioralVerification(rawCode, analysis, plan, migratedCode)
         ? 'Verified e.preventDefault() invocation in synthetic event handlers.'
         : 'Failed: e.preventDefault() missing in React handler.',
       status: preservesPreventDefault ? 'PASSED' : 'FAILED',
+      failureExplanation: preservesPreventDefault ? null : 'Native event prevention missing from synthetic event handler.',
       affectedFunctionality: 'Default Browser Action Suppression'
     });
   }

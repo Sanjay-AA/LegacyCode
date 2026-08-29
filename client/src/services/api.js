@@ -120,3 +120,61 @@ export async function shipMigrationApi() {
 
   return data.shipResult;
 }
+
+export async function runPipelineStream({ code, filename, retryStage }, onEvent, onError, onComplete) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/pipeline/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream'
+      },
+      body: JSON.stringify({ code, filename, retryStage })
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Pipeline stream failed (${response.status}): ${text}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop() || '';
+
+      for (const chunk of lines) {
+        if (!chunk.trim()) continue;
+
+        let eventType = 'message';
+        let data = null;
+
+        for (const line of chunk.split('\n')) {
+          if (line.startsWith('event: ')) {
+            eventType = line.replace('event: ', '').trim();
+          } else if (line.startsWith('data: ')) {
+            try {
+              data = JSON.parse(line.replace('data: ', '').trim());
+            } catch (e) {
+              data = line.replace('data: ', '').trim();
+            }
+          }
+        }
+
+        if (data && onEvent) {
+          onEvent(eventType, data);
+        }
+      }
+    }
+
+    if (onComplete) onComplete();
+  } catch (err) {
+    if (onError) onError(err);
+  }
+}
