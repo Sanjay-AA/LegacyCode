@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import Header from './Header';
 import PipelineOverview from './PipelineOverview';
 import CodeUploader from './CodeUploader';
 import CodeWorkspace from './CodeWorkspace';
@@ -8,22 +9,25 @@ import RiskAssessment from './RiskAssessment';
 import BehavioralContract from './BehavioralContract';
 import TransformationExplanations from './TransformationExplanations';
 import MigrationReport from './MigrationReport';
-import AnalysisViewer from './AnalysisViewer';
-import PlanViewer from './PlanViewer';
-import MigrateViewer from './MigrateViewer';
+import DependencyGraph from './DependencyGraph';
+import MigrationHistory from './MigrationHistory';
+import AdapterDashboard from './AdapterDashboard';
 import VerifyViewer from './VerifyViewer';
-import ShipViewer from './ShipViewer';
-import { runPipelineStream, shipMigrationApi } from '../services/api';
+import PlanViewer from './PlanViewer';
+import { runPipelineStream, runProjectPipelineStream, shipMigrationApi, fetchAdaptersApi } from '../services/api';
 import {
   RefreshCw, RotateCcw, XCircle, CheckCircle2, ExternalLink, GitPullRequest,
-  Code, Search, Map, ShieldCheck, Send, Sparkles, Activity, ShieldAlert,
-  FileText, Lightbulb, ChevronDown, ChevronUp, Award
+  Code, Activity, ShieldAlert, FileText, Lightbulb, Network, History, Award, Layers, Map, ShieldCheck, Send, Sparkles
 } from 'lucide-react';
 
 export default function Dashboard() {
   const [session, setSession] = useState({
     filename: null,
     rawCode: null,
+    isProject: false,
+    adapterId: 'jquery-to-react',
+    detection: null,
+    selectedAdapter: null,
     analysis: null,
     plan: null,
     migratedCode: null,
@@ -33,15 +37,24 @@ export default function Dashboard() {
     repairAttempts: 0,
     readyForReview: false,
     shipResult: null,
-    currentStage: 'idle', // 'idle' | 'upload' | 'analyze' | 'plan' | 'migrate' | 'verify' | 'ship' | 'completed'
-    stageStatus: 'idle', // 'idle' | 'running' | 'success' | 'error'
+    currentStage: 'idle',
+    stageStatus: 'idle',
     errorState: null,
     traceLogs: []
   });
 
-  const [activeTab, setActiveTab] = useState('workspace'); // 'workspace' | 'health' | 'risk' | 'contract' | 'explanations' | 'analyze' | 'plan' | 'verify' | 'report'
+  const [activeTab, setActiveTab] = useState('workspace');
+  const [adapters, setAdapters] = useState([]);
+  const [history, setHistory] = useState([]);
   const [isShipping, setIsShipping] = useState(false);
   const abortControllerRef = useRef(null);
+
+  useEffect(() => {
+    fetchAdaptersApi().then(data => {
+      if (data.adapters) setAdapters(data.adapters);
+      if (data.history) setHistory(data.history);
+    }).catch(console.error);
+  }, []);
 
   const addTraceLog = (text, type = 'info', timestamp = null) => {
     const timeStr = timestamp || new Date().toLocaleTimeString('en-US', { hour12: false });
@@ -51,7 +64,7 @@ export default function Dashboard() {
     }));
   };
 
-  const startPipeline = (codeContent, filename) => {
+  const startPipeline = (codeContent, filename, chosenAdapterId) => {
     if (!codeContent || !codeContent.trim()) return;
 
     if (abortControllerRef.current) {
@@ -67,6 +80,10 @@ export default function Dashboard() {
     setSession({
       filename,
       rawCode: codeContent,
+      isProject: false,
+      adapterId: chosenAdapterId || 'jquery-to-react',
+      detection: null,
+      selectedAdapter: null,
       analysis: null,
       plan: null,
       migratedCode: null,
@@ -76,7 +93,7 @@ export default function Dashboard() {
       repairAttempts: 0,
       readyForReview: false,
       shipResult: null,
-      currentStage: 'analyze',
+      currentStage: 'detect',
       stageStatus: 'running',
       errorState: null,
       traceLogs: [initialLog]
@@ -85,7 +102,52 @@ export default function Dashboard() {
     setActiveTab('workspace');
 
     runPipelineStream(
-      { code: codeContent, filename },
+      { code: codeContent, filename, adapterId: chosenAdapterId },
+      handlePipelineEvent,
+      handlePipelineError,
+      handlePipelineComplete
+    );
+  };
+
+  const startProjectPipeline = (zipBase64, filename, chosenAdapterId) => {
+    if (!zipBase64) return;
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const initialLog = {
+      timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      text: `Project Archive Uploaded: ${filename}`,
+      type: 'start'
+    };
+
+    setSession({
+      filename,
+      rawCode: `/* Project Archive: ${filename} */`,
+      isProject: true,
+      adapterId: chosenAdapterId || 'jquery-to-react',
+      detection: null,
+      selectedAdapter: null,
+      analysis: null,
+      plan: null,
+      migratedCode: null,
+      migrationSummary: null,
+      explanations: [],
+      verification: null,
+      repairAttempts: 0,
+      readyForReview: false,
+      shipResult: null,
+      currentStage: 'detect',
+      stageStatus: 'running',
+      errorState: null,
+      traceLogs: [initialLog]
+    });
+
+    setActiveTab('workspace');
+
+    runProjectPipelineStream(
+      { projectZipBase64: zipBase64, filename, adapterId: chosenAdapterId },
       handlePipelineEvent,
       handlePipelineError,
       handlePipelineComplete
@@ -106,7 +168,7 @@ export default function Dashboard() {
     }));
 
     runPipelineStream(
-      { code: session.rawCode, filename: session.filename, retryStage: stageToRetry },
+      { code: session.rawCode, filename: session.filename, adapterId: session.adapterId, retryStage: stageToRetry },
       handlePipelineEvent,
       handlePipelineError,
       handlePipelineComplete
@@ -133,6 +195,7 @@ export default function Dashboard() {
         readyForReview: false
       }));
 
+      fetchAdaptersApi().then(data => { if (data.history) setHistory(data.history); }).catch(() => {});
       setActiveTab('report');
     } catch (err) {
       console.error('Ship stage failed:', err);
@@ -154,11 +217,21 @@ export default function Dashboard() {
     const time = data.timestamp || new Date().toLocaleTimeString('en-US', { hour12: false });
 
     switch (eventType) {
-      case 'upload':
+      case 'detect:start':
         setSession(prev => ({
           ...prev,
+          currentStage: 'detect',
+          traceLogs: [...prev.traceLogs, { timestamp: time, text: data.message || 'Detecting technology stack...', type: 'start' }]
+        }));
+        break;
+
+      case 'detect:complete':
+        setSession(prev => ({
+          ...prev,
+          detection: data.detection || data.technologies,
+          selectedAdapter: data.selectedAdapter,
           currentStage: 'analyze',
-          traceLogs: [...prev.traceLogs, { timestamp: time, text: data.message || `File uploaded: ${data.filename}`, type: 'info' }]
+          traceLogs: [...prev.traceLogs, { timestamp: time, text: data.message || 'Technology stack identified', type: 'success' }]
         }));
         break;
 
@@ -166,7 +239,7 @@ export default function Dashboard() {
         setSession(prev => ({
           ...prev,
           currentStage: 'analyze',
-          traceLogs: [...prev.traceLogs, { timestamp: time, text: data.message || 'Analyzing jQuery behavior...', type: 'start' }]
+          traceLogs: [...prev.traceLogs, { timestamp: time, text: data.message || 'Analyzing system behavior & health...', type: 'start' }]
         }));
         break;
 
@@ -204,7 +277,7 @@ export default function Dashboard() {
         setSession(prev => ({
           ...prev,
           currentStage: 'migrate',
-          traceLogs: [...prev.traceLogs, { timestamp: time, text: data.message || 'Migrating jQuery → React...', type: 'start' }]
+          traceLogs: [...prev.traceLogs, { timestamp: time, text: data.message || 'Migrating code...', type: 'start' }]
         }));
         break;
 
@@ -215,7 +288,7 @@ export default function Dashboard() {
           migrationSummary: data.summary,
           explanations: data.explanations || [],
           currentStage: 'verify',
-          traceLogs: [...prev.traceLogs, { timestamp: time, text: data.message || 'React component generated', type: 'success' }]
+          traceLogs: [...prev.traceLogs, { timestamp: time, text: data.message || 'Modernized code generated', type: 'success' }]
         }));
         break;
 
@@ -225,7 +298,7 @@ export default function Dashboard() {
           repairAttempts: data.repairAttempt || 1,
           traceLogs: [
             ...prev.traceLogs,
-            { timestamp: time, text: `Migration correction required (${data.failedTestName || 'Boundary Clamp'})`, type: 'error' },
+            { timestamp: time, text: `Migration correction required (${data.failedTestName || 'Assertion Check'})`, type: 'error' },
             { timestamp: time, text: `Attempting autonomous self-repair ${data.repairAttempt}/${data.maxAttempts || 2}...`, type: 'start' }
           ]
         }));
@@ -235,7 +308,7 @@ export default function Dashboard() {
         setSession(prev => ({
           ...prev,
           migratedCode: data.migratedCode,
-          traceLogs: [...prev.traceLogs, { timestamp: time, text: `Corrected React implementation generated (Attempt ${data.repairAttempt})`, type: 'success' }]
+          traceLogs: [...prev.traceLogs, { timestamp: time, text: `Corrected implementation generated (Attempt ${data.repairAttempt})`, type: 'success' }]
         }));
         break;
 
@@ -339,6 +412,10 @@ export default function Dashboard() {
     setSession({
       filename: null,
       rawCode: null,
+      isProject: false,
+      adapterId: 'jquery-to-react',
+      detection: null,
+      selectedAdapter: null,
       analysis: null,
       plan: null,
       migratedCode: null,
@@ -360,345 +437,429 @@ export default function Dashboard() {
   const beforeScore = session.analysis?.health?.score || 42;
   const afterScore = 92;
 
+  const activeAdapterSource = session.selectedAdapter?.source || session.analysis?.technology || 'jQuery';
+  const activeAdapterTarget = session.selectedAdapter?.target || session.analysis?.target || 'React';
+
+  const statusDisplay = session.shipResult
+    ? 'Shipped'
+    : session.readyForReview
+    ? 'Ready for Review'
+    : session.stageStatus === 'running'
+    ? `${session.currentStage.toUpperCase()} Active`
+    : session.stageStatus === 'error'
+    ? 'Halted'
+    : 'Idle';
+
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* 5-Stage Autonomous Pipeline Overview Bar */}
-      <PipelineOverview
-        hasUploaded={!!session.rawCode}
-        hasAnalysis={!!session.analysis}
-        hasPlan={!!session.plan}
-        hasMigrated={!!session.migratedCode}
-        hasVerified={!!session.verification}
-        hasShipped={!!session.shipResult}
-        currentStage={session.currentStage}
-        errorState={session.errorState}
+    <>
+      <Header
+        sourceTech={activeAdapterSource}
+        targetTech={activeAdapterTarget}
+        status={statusDisplay}
+        stageStatus={session.stageStatus}
+        shipResult={session.shipResult}
       />
 
-      {/* Main Workspace Area */}
-      {!session.rawCode ? (
-        /* INITIAL STATE: Upload Area */
-        <CodeUploader
-          onUpload={startPipeline}
-          isProcessing={session.stageStatus === 'running'}
+      <main className="max-[#070a0e] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full flex-1">
+        {/* 7-Stage Universal Pipeline Overview Bar */}
+        <PipelineOverview
+          hasDetected={!!session.detection || !!session.analysis}
+          hasAnalysis={!!session.analysis}
+          hasPlan={!!session.plan}
+          hasMigrated={!!session.migratedCode}
+          hasVerified={!!session.verification}
+          readyForReview={session.readyForReview}
+          hasShipped={!!session.shipResult}
+          currentStage={session.currentStage}
+          errorState={session.errorState}
         />
-      ) : (
-        /* ACTIVE / COMPLETED STATE: Autonomous Pipeline Workspace */
-        <div className="space-y-6">
-          {/* Secondary Control Bar & Session Status */}
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-md">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono text-xs font-semibold">
-                {session.filename || 'jquery-file.js'}
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-slate-200 flex items-center space-x-2">
-                  <span>Target:</span>
-                  <span className="text-emerald-400 font-mono">{componentName}.jsx</span>
-                </h3>
-                <p className="text-xs text-slate-400">
-                  {session.stageStatus === 'running'
-                    ? `Executing Stage: ${session.currentStage.toUpperCase()}...`
-                    : session.shipResult
-                    ? 'Migration fully completed & shipped!'
-                    : session.readyForReview
-                    ? 'Awaiting Human Approval Gate'
-                    : `Halted at stage: ${session.currentStage.toUpperCase()}`}
-                </p>
-              </div>
-            </div>
 
-            {/* Secondary Controls (Cancel, Retry, New Migration) */}
-            <div className="flex items-center space-x-2">
-              {session.stageStatus === 'running' && (
-                <button
-                  onClick={cancelPipeline}
-                  className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/20 text-xs font-semibold px-3.5 py-1.5 rounded-xl transition-colors flex items-center space-x-1.5"
-                >
-                  <XCircle className="w-3.5 h-3.5" />
-                  <span>Cancel Migration</span>
-                </button>
-              )}
-
-              {session.stageStatus === 'error' && (
-                <button
-                  onClick={retryPipelineStage}
-                  className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/20 text-xs font-semibold px-3.5 py-1.5 rounded-xl transition-colors flex items-center space-x-1.5"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Retry Stage ({session.errorState?.stage || 'current'})</span>
-                </button>
-              )}
-
+        {/* Main Workspace Area */}
+        {!session.rawCode ? (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between bg-[#0c1219] p-1.5 rounded-xl border border-[#1c2e38] text-xs font-semibold font-mono max-w-5xl mx-auto">
               <button
-                onClick={resetPipeline}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold px-3.5 py-1.5 rounded-xl transition-colors flex items-center space-x-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Start New Migration</span>
-              </button>
-            </div>
-          </div>
-
-          {/* HUMAN APPROVAL GATE BANNER */}
-          {session.readyForReview && !session.shipResult && (
-            <div className="bg-gradient-to-r from-sky-950/80 to-blue-950/80 border-2 border-sky-400/80 rounded-2xl p-6 shadow-2xl space-y-4 animate-pulse">
-              <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-sky-500/30">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2.5 rounded-2xl bg-sky-500/20 text-sky-400 border border-sky-500/30">
-                    <ShieldCheck className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white flex items-center gap-2">
-                      READY TO SHIP — Human Approval Required
-                      <span className="text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-mono">
-                        Verification Passed
-                      </span>
-                    </h3>
-                    <p className="text-xs text-slate-300">
-                      Review the modernized React component and behavioral contract verification before creating the GitHub Pull Request.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-3">
-                  <button
-                    onClick={() => setActiveTab('workspace')}
-                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-4 py-2.5 rounded-xl border border-slate-700 transition-all"
-                  >
-                    Review Migration Details
-                  </button>
-                  <button
-                    onClick={handleApproveAndShip}
-                    disabled={isShipping}
-                    className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-50 text-white text-xs font-bold px-6 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center space-x-2"
-                  >
-                    {isShipping ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Creating PR...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-4 h-4" />
-                        <span>Approve & Create PR</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
-                <div className="bg-slate-950/70 border border-sky-500/30 p-3 rounded-xl flex items-center space-x-2 text-emerald-400">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>Verification passed ({session.verification?.metrics?.passedTests}/{session.verification?.metrics?.totalTests} tests)</span>
-                </div>
-                <div className="bg-slate-950/70 border border-sky-500/30 p-3 rounded-xl flex items-center space-x-2 text-purple-300">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>Migration Risk Reduced ({beforeScore} → {afterScore})</span>
-                </div>
-                <div className="bg-slate-950/70 border border-sky-500/30 p-3 rounded-xl flex items-center space-x-2 text-sky-300">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>Self-Repair Attempts: {session.repairAttempts}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* FINAL SUCCESS BANNER */}
-          {session.shipResult && (
-            <div className="bg-gradient-to-r from-emerald-950/60 to-teal-950/60 border border-emerald-500/40 rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-emerald-500/20">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white flex items-center gap-2">
-                      Migration Complete & Shipped
-                      <span className="text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-mono">
-                        Human Approved
-                      </span>
-                    </h3>
-                    <p className="text-xs text-emerald-300/80">
-                      Successfully modernized legacy jQuery code to React and opened GitHub Pull Request #{session.shipResult.pullRequest?.number}.
-                    </p>
-                  </div>
-                </div>
-
-                <a
-                  href={session.shipResult.pullRequest?.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-lg shadow-sky-500/20 transition-all flex items-center space-x-2"
-                >
-                  <GitPullRequest className="w-4 h-4" />
-                  <span>View Pull Request #{session.shipResult.pullRequest?.number}</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </div>
-            </div>
-          )}
-
-          {/* ERROR ALERT BANNER */}
-          {session.errorState && (
-            <div className="bg-rose-950/40 border border-rose-500/40 rounded-2xl p-5 text-xs text-rose-300 space-y-2 shadow-lg">
-              <div className="flex items-center space-x-2 font-bold text-rose-400 text-sm">
-                <XCircle className="w-5 h-5 shrink-0" />
-                <span>Pipeline Stopped: {session.errorState.stage.toUpperCase()} Stage Error</span>
-              </div>
-              <p className="text-slate-200 font-mono bg-slate-950/80 p-3 rounded-xl border border-rose-500/20">
-                {session.errorState.message}
-              </p>
-              {session.errorState.stage === 'verify' && (
-                <p className="text-rose-300 text-[11px]">
-                  Shipping was automatically BLOCKED because behavioral verification failed after {session.repairAttempts} self-repair attempt(s). Human review required.
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* VIEW SELECTOR TABS */}
-          <div className="flex items-center space-x-1 bg-slate-900/60 p-1.5 rounded-xl border border-slate-800 text-xs font-semibold overflow-x-auto">
-            <button
-              onClick={() => setActiveTab('workspace')}
-              className={`px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-colors ${
-                activeTab === 'workspace' ? 'bg-slate-800 text-sky-400 border border-slate-700/60 shadow-sm' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Code className="w-3.5 h-3.5" />
-              <span>Live Code Workspace</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('health')}
-              disabled={!session.analysis}
-              className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors disabled:opacity-40 ${
-                activeTab === 'health' ? 'bg-slate-800 text-rose-400 border border-slate-700/60' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5" />
-              <span>Legacy Health</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('risk')}
-              disabled={!session.analysis}
-              className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors disabled:opacity-40 ${
-                activeTab === 'risk' ? 'bg-slate-800 text-purple-400 border border-slate-700/60' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <ShieldAlert className="w-3.5 h-3.5" />
-              <span>Migration Risk</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('contract')}
-              disabled={!session.analysis}
-              className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors disabled:opacity-40 ${
-                activeTab === 'contract' ? 'bg-slate-800 text-teal-400 border border-slate-700/60' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Behavioral Contract</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('explanations')}
-              disabled={!session.migratedCode}
-              className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors disabled:opacity-40 ${
-                activeTab === 'explanations' ? 'bg-slate-800 text-amber-400 border border-slate-700/60' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Lightbulb className="w-3.5 h-3.5" />
-              <span>Explanations</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('verify')}
-              disabled={!session.verification}
-              className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors disabled:opacity-40 ${
-                activeTab === 'verify' ? 'bg-slate-800 text-emerald-400 border border-slate-700/60' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Verification</span>
-            </button>
-
-            {session.shipResult && (
-              <button
-                onClick={() => setActiveTab('report')}
-                className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors ${
-                  activeTab === 'report' ? 'bg-slate-800 text-emerald-400 border border-slate-700/60' : 'text-slate-400 hover:text-slate-200'
+                onClick={() => setActiveTab('workspace')}
+                className={`px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-colors ${
+                  activeTab === 'workspace' ? 'bg-[#1c2e38] text-[#10b981]' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <Award className="w-3.5 h-3.5" />
-                <span>Final Report</span>
+                <Code className="w-3.5 h-3.5" />
+                <span>Universal Ingestion</span>
               </button>
+              <button
+                onClick={() => setActiveTab('adapters')}
+                className={`px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-colors ${
+                  activeTab === 'adapters' ? 'bg-[#1c2e38] text-[#10b981]' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Adapter Capabilities Dashboard</span>
+              </button>
+            </div>
+
+            {activeTab === 'adapters' ? (
+              <div className="max-w-5xl mx-auto">
+                <AdapterDashboard />
+              </div>
+            ) : (
+              <CodeUploader
+                onUpload={startPipeline}
+                onUploadProject={startProjectPipeline}
+                adapters={adapters}
+                isProcessing={session.stageStatus === 'running'}
+              />
             )}
           </div>
-
-          {/* ACTIVE CONTENT VIEW */}
-          {activeTab === 'workspace' ? (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2">
-                <CodeWorkspace
-                  originalSource={session.rawCode}
-                  filename={session.filename}
-                  migratedSource={session.migratedCode}
-                  componentName={componentName}
-                  currentStage={session.currentStage}
-                  isMigrating={session.currentStage === 'migrate'}
-                />
+        ) : (
+          /* ACTIVE / COMPLETED STATE: Universal Modernization Workspace */
+          <div className="space-y-6">
+            {/* Secondary Control Bar & Active Stack Indicator */}
+            <div className="bg-[#0c1219] border border-[#1c2e38] rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-xl">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono text-xs font-bold">
+                  {session.filename || 'legacy-file'}
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-200 flex items-center space-x-2 font-mono">
+                    <span className="text-slate-400">{activeAdapterSource}</span>
+                    <span className="text-slate-500">→</span>
+                    <span className="text-[#10b981]">{activeAdapterTarget} ({componentName})</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {session.stageStatus === 'running'
+                      ? `Executing Stage: ${session.currentStage.toUpperCase()}...`
+                      : session.shipResult
+                      ? 'Migration fully completed & shipped!'
+                      : session.readyForReview
+                      ? 'Awaiting Human Approval Gate'
+                      : `Halted at stage: ${session.currentStage.toUpperCase()}`}
+                  </p>
+                </div>
               </div>
 
-              <div className="lg:col-span-1">
-                <AgentTrace
-                  traceLogs={session.traceLogs}
-                  currentStage={session.currentStage}
-                  stageStatus={session.stageStatus}
-                  errorState={session.errorState}
-                />
+              {/* Secondary Controls */}
+              <div className="flex items-center space-x-2 font-mono text-xs">
+                {session.stageStatus === 'running' && (
+                  <button
+                    onClick={cancelPipeline}
+                    className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/20 px-3.5 py-1.5 rounded-xl transition-colors flex items-center space-x-1.5 font-bold"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>Cancel Migration</span>
+                  </button>
+                )}
+
+                {session.stageStatus === 'error' && (
+                  <button
+                    onClick={retryPipelineStage}
+                    className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/20 px-3.5 py-1.5 rounded-xl transition-colors flex items-center space-x-1.5 font-bold"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Retry Stage ({session.errorState?.stage || 'current'})</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={resetPipeline}
+                  className="bg-[#111a22] hover:bg-[#16222d] text-slate-200 border border-[#1c2e38] px-3.5 py-1.5 rounded-xl transition-colors flex items-center space-x-1.5 font-bold"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-[#10b981]" />
+                  <span>Start New Migration</span>
+                </button>
               </div>
             </div>
-          ) : activeTab === 'health' ? (
-            <HealthReport
-              healthData={session.analysis?.health}
-              filename={session.filename}
-              patterns={session.analysis?.patterns}
-              risks={session.analysis?.risks}
-            />
-          ) : activeTab === 'risk' ? (
-            <RiskAssessment
-              beforeScore={beforeScore}
-              afterScore={afterScore}
-              beforeLevel={session.analysis?.health?.riskLevel || 'HIGH'}
-              afterLevel="LOW"
-              reasons={session.analysis?.risks?.map(r => r.title) || []}
-            />
-          ) : activeTab === 'contract' ? (
-            <BehavioralContract contract={session.analysis?.behavioralContract} />
-          ) : activeTab === 'explanations' ? (
-            <TransformationExplanations explanations={session.explanations} />
-          ) : activeTab === 'verify' ? (
-            <VerifyViewer
-              verification={session.verification}
-              hasMigrated={!!session.migratedCode}
-            />
-          ) : (
-            <MigrationReport
-              sourceFile={session.filename}
-              componentName={componentName}
-              verificationMetrics={session.verification?.metrics}
-              repairAttempts={session.repairAttempts}
-              beforeScore={beforeScore}
-              afterScore={afterScore}
-              transformationsCount={session.explanations?.length || 5}
-              pullRequest={session.shipResult?.pullRequest}
-              status="Shipped"
-            />
-          )}
-        </div>
-      )}
-    </main>
+
+            {/* HUMAN APPROVAL GATE BANNER */}
+            {session.readyForReview && !session.shipResult && (
+              <div className="bg-[#0c1219] border-2 border-[#10b981] rounded-2xl p-6 shadow-2xl space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-[#1c2e38]">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2.5 rounded-2xl bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/30">
+                      <ShieldCheck className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-white flex items-center gap-2 font-mono">
+                        READY TO SHIP — Waiting for your approval
+                      </h3>
+                      <p className="text-xs text-slate-300">
+                        Review the modernized code and verification results before creating the GitHub Pull Request.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <button
+                      onClick={() => setActiveTab('workspace')}
+                      className="bg-[#111a22] hover:bg-[#16222d] text-slate-200 text-xs font-bold font-mono px-4 py-2.5 rounded-xl border border-[#1c2e38] transition-all"
+                    >
+                      Review Migration Details
+                    </button>
+                    <button
+                      onClick={handleApproveAndShip}
+                      disabled={isShipping}
+                      className="bg-[#10b981] hover:bg-emerald-400 disabled:opacity-50 text-slate-950 text-xs font-extrabold font-mono px-6 py-2.5 rounded-xl shadow-lg transition-all flex items-center space-x-2"
+                    >
+                      {isShipping ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Creating PR...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4 stroke-[2.5]" />
+                          <span>Approve & Create PR</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+                  <div className="bg-[#070a0e] border border-[#1c2e38] p-3 rounded-xl flex items-center space-x-2 text-[#10b981]">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>Verification: {session.verification?.metrics?.passedTests}/{session.verification?.metrics?.totalTests} passed</span>
+                  </div>
+                  <div className="bg-[#070a0e] border border-[#1c2e38] p-3 rounded-xl flex items-center space-x-2 text-purple-300">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>Migration Risk: {beforeScore} → {afterScore} (LOW)</span>
+                  </div>
+                  <div className="bg-[#070a0e] border border-[#1c2e38] p-3 rounded-xl flex items-center space-x-2 text-sky-300">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>Self-Repair: {session.repairAttempts} attempt(s)</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* FINAL SUCCESS BANNER */}
+            {session.shipResult && (
+              <div className="bg-[#0c1219] border border-[#10b981] rounded-2xl p-6 shadow-xl space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#1c2e38]">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2.5 rounded-2xl bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/30">
+                      <CheckCircle2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-white flex items-center gap-2 font-mono">
+                        MIGRATION SHIPPED ✓
+                      </h3>
+                      <p className="text-xs text-[#10b981]">
+                        Successfully modernized {activeAdapterSource} → {activeAdapterTarget} and opened GitHub Pull Request #{session.shipResult.pullRequest?.number}.
+                      </p>
+                    </div>
+                  </div>
+
+                  <a
+                    href={session.shipResult.pullRequest?.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-[#10b981] hover:bg-emerald-400 text-slate-950 text-xs font-extrabold font-mono px-5 py-2.5 rounded-xl shadow-lg transition-all flex items-center space-x-2"
+                  >
+                    <GitPullRequest className="w-4 h-4 stroke-[2.5]" />
+                    <span>View Pull Request #{session.shipResult.pullRequest?.number}</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* ERROR ALERT BANNER */}
+            {session.errorState && (
+              <div className="bg-rose-950/40 border border-rose-500/40 rounded-2xl p-5 text-xs text-rose-300 space-y-2 shadow-lg font-mono">
+                <div className="flex items-center space-x-2 font-bold text-rose-400 text-sm">
+                  <XCircle className="w-5 h-5 shrink-0" />
+                  <span>Pipeline Stopped: {session.errorState.stage.toUpperCase()} Stage Error</span>
+                </div>
+                <p className="text-slate-200 bg-[#070a0e] p-3 rounded-xl border border-rose-500/20">
+                  {session.errorState.message}
+                </p>
+              </div>
+            )}
+
+            {/* VIEW SELECTOR TABS */}
+            <div className="flex items-center space-x-1 bg-[#0c1219] p-1.5 rounded-xl border border-[#1c2e38] text-xs font-mono font-bold overflow-x-auto">
+              <button
+                onClick={() => setActiveTab('workspace')}
+                className={`px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-colors ${
+                  activeTab === 'workspace' ? 'bg-[#1c2e38] text-[#10b981]' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Code className="w-3.5 h-3.5" />
+                <span>Live Code Workspace</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('plan')}
+                disabled={!session.plan}
+                className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors disabled:opacity-40 ${
+                  activeTab === 'plan' ? 'bg-[#1c2e38] text-[#10b981]' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Map className="w-3.5 h-3.5" />
+                <span>Migration Plan</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('health')}
+                disabled={!session.analysis}
+                className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors disabled:opacity-40 ${
+                  activeTab === 'health' ? 'bg-[#1c2e38] text-rose-400' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>Legacy Health</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('risk')}
+                disabled={!session.analysis}
+                className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors disabled:opacity-40 ${
+                  activeTab === 'risk' ? 'bg-[#1c2e38] text-purple-400' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>Migration Risk</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('graph')}
+                disabled={!session.analysis}
+                className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors disabled:opacity-40 ${
+                  activeTab === 'graph' ? 'bg-[#1c2e38] text-indigo-400' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Network className="w-3.5 h-3.5" />
+                <span>Dependency Graph</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('contract')}
+                disabled={!session.analysis}
+                className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors disabled:opacity-40 ${
+                  activeTab === 'contract' ? 'bg-[#1c2e38] text-teal-400' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Behavioral Contract</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('explanations')}
+                disabled={!session.migratedCode}
+                className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors disabled:opacity-40 ${
+                  activeTab === 'explanations' ? 'bg-[#1c2e38] text-amber-400' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Lightbulb className="w-3.5 h-3.5" />
+                <span>Explanations</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('verify')}
+                disabled={!session.verification}
+                className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors disabled:opacity-40 ${
+                  activeTab === 'verify' ? 'bg-[#1c2e38] text-[#10b981]' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Verification</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors ${
+                  activeTab === 'history' ? 'bg-[#1c2e38] text-cyan-400' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <History className="w-3.5 h-3.5" />
+                <span>History ({history.length})</span>
+              </button>
+
+              {session.shipResult && (
+                <button
+                  onClick={() => setActiveTab('report')}
+                  className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors ${
+                    activeTab === 'report' ? 'bg-[#1c2e38] text-[#10b981]' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Award className="w-3.5 h-3.5" />
+                  <span>Final Report</span>
+                </button>
+              )}
+            </div>
+
+            {/* ACTIVE CONTENT VIEW */}
+            {activeTab === 'workspace' ? (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2">
+                  <CodeWorkspace
+                    originalSource={session.rawCode}
+                    filename={session.filename}
+                    migratedSource={session.migratedCode}
+                    componentName={componentName}
+                    currentStage={session.currentStage}
+                    isMigrating={session.currentStage === 'migrate'}
+                  />
+                </div>
+
+                <div className="lg:col-span-1">
+                  <AgentTrace
+                    traceLogs={session.traceLogs}
+                    currentStage={session.currentStage}
+                    stageStatus={session.stageStatus}
+                    errorState={session.errorState}
+                  />
+                </div>
+              </div>
+            ) : activeTab === 'plan' ? (
+              <PlanViewer plan={session.plan} />
+            ) : activeTab === 'adapters' ? (
+              <AdapterDashboard />
+            ) : activeTab === 'health' ? (
+              <HealthReport
+                healthData={session.analysis?.health}
+                filename={session.filename}
+                patterns={session.analysis?.patterns}
+                risks={session.analysis?.risks}
+              />
+            ) : activeTab === 'risk' ? (
+              <RiskAssessment
+                beforeScore={beforeScore}
+                afterScore={afterScore}
+                beforeLevel={session.analysis?.health?.riskLevel || 'HIGH'}
+                afterLevel="LOW"
+                reasons={session.analysis?.risks?.map(r => r.title) || []}
+              />
+            ) : activeTab === 'graph' ? (
+              <DependencyGraph graphData={session.analysis?.dependencyGraph} />
+            ) : activeTab === 'contract' ? (
+              <BehavioralContract contract={session.analysis?.behavioralContract} />
+            ) : activeTab === 'explanations' ? (
+              <TransformationExplanations explanations={session.explanations} />
+            ) : activeTab === 'verify' ? (
+              <VerifyViewer
+                verification={session.verification}
+                hasMigrated={!!session.migratedCode}
+              />
+            ) : activeTab === 'history' ? (
+              <MigrationHistory history={history} />
+            ) : (
+              <MigrationReport
+                sourceFile={session.filename}
+                componentName={componentName}
+                verificationMetrics={session.verification?.metrics}
+                repairAttempts={session.repairAttempts}
+                beforeScore={beforeScore}
+                afterScore={afterScore}
+                transformationsCount={session.explanations?.length || 5}
+                pullRequest={session.shipResult?.pullRequest}
+                status="Shipped"
+              />
+            )}
+          </div>
+        )}
+      </main>
+    </>
   );
 }

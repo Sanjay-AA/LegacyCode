@@ -21,15 +21,21 @@ function findGitRoot(startDir = process.cwd()) {
 /**
  * Legacy Rescue - Ship Stage Module
  * Executes git branch creation, file addition, commit, push, and GitHub Pull Request creation.
+ * Idempotency Protection: If PR was already created for this session, returns existing result.
  */
 export async function shipMigration(session) {
+  // Idempotency Check: Return existing PR result if already shipped
+  if (session && session.shipResult) {
+    return session.shipResult;
+  }
+
   if (!session || !session.verificationResult) {
     throw new Error('Shipping blocked: No verification result found in active session.');
   }
 
   const { verificationResult, rawCode, analysis, plan, migratedCode } = session;
 
-  // 1. Guard Check: Must be VERIFIED with zero failed tests
+  // Guard Check: Must be VERIFIED with zero failed tests
   if (verificationResult.overallStatus !== 'VERIFIED' || (verificationResult.metrics && verificationResult.metrics.failedTests > 0)) {
     const error = new Error(`Shipping Blocked: Behavioral verification failed (${verificationResult.metrics?.failedTests || 1} failing test(s)). Fix verification disparities before shipping.`);
     error.isBlocked = true;
@@ -49,16 +55,13 @@ export async function shipMigration(session) {
     const repoRoot = findGitRoot(process.cwd());
     const migratedFilePath = path.join(repoRoot, 'client', 'src', 'components', 'migrated', `${componentName}.jsx`);
 
-    // Ensure directory exists
     const dir = path.dirname(migratedFilePath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    // Write migrated React file
     fs.writeFileSync(migratedFilePath, migratedCode, 'utf-8');
 
-    // Execute git branch creation
     await execAsync(`git checkout -b "${branchName}"`, { cwd: repoRoot });
     steps[steps.length - 1].status = 'completed';
 
@@ -70,7 +73,6 @@ export async function shipMigration(session) {
     const commitMessage = `feat(modernize): migrate ${filename} to ${componentName}.jsx`;
     await execAsync(`git commit -m "${commitMessage}"`, { cwd: repoRoot });
 
-    // Get commit hash
     const { stdout: hashStdout } = await execAsync('git rev-parse --short HEAD', { cwd: repoRoot });
     const commitHash = hashStdout.trim();
     steps[steps.length - 1].status = 'completed';
@@ -79,7 +81,7 @@ export async function shipMigration(session) {
     steps.push({ step: 'Creating Pull Request', status: 'in_progress' });
     await execAsync(`git push origin "${branchName}"`, { cwd: repoRoot });
 
-    // Step 4: Create GitHub Pull Request via GitHub REST API
+    // Step 4: Create GitHub Pull Request via REST API
     const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
     const repoOwner = process.env.GITHUB_REPOSITORY_OWNER || 'Sanjay-AA';
     const repoName = process.env.GITHUB_REPOSITORY_NAME || 'LegacyCode';
@@ -150,7 +152,6 @@ After: LOW (92/100)
     steps[steps.length - 1].status = 'completed';
     steps.push({ step: 'Pull Request created', status: 'completed' });
 
-    // Switch local git checkout back to main
     await execAsync('git checkout main', { cwd: repoRoot }).catch(() => {});
 
     return {

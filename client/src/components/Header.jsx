@@ -1,38 +1,71 @@
 import React from 'react';
 import HealthStatus from './HealthStatus';
-import { Terminal, ArrowRight, Code2 } from 'lucide-react';
+import { ArrowRight, Code2, GitPullRequest, ExternalLink } from 'lucide-react';
 
-export default function Header() {
+export default function Header({
+  sourceTech = 'jQuery',
+  targetTech = 'React',
+  status = 'Idle',
+  stageStatus = 'idle',
+  shipResult = null
+}) {
   return (
-    <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        {/* Brand & Migration Scope Badge */}
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2.5">
-            <div className="bg-gradient-to-tr from-sky-500 to-cyan-400 p-2 rounded-xl text-slate-950 font-bold shadow-lg shadow-sky-500/20">
-              <Terminal className="w-5 h-5 stroke-[2.5]" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-                Legacy Rescue
-                <span className="text-[10px] uppercase tracking-wider bg-sky-500/10 text-sky-400 font-semibold px-2 py-0.5 rounded-full border border-sky-500/20">
-                  BuildSprint 2026
-                </span>
-              </h1>
-              <p className="text-xs text-slate-400">Autonomous Code Modernization Agent</p>
-            </div>
-          </div>
-
-          <div className="hidden md:flex items-center space-x-2 text-xs bg-slate-800/60 border border-slate-700/50 px-3 py-1 rounded-lg text-slate-300">
-            <Code2 className="w-3.5 h-3.5 text-amber-400" />
-            <span>jQuery</span>
-            <ArrowRight className="w-3 h-3 text-slate-500" />
-            <span className="text-sky-400 font-medium">React</span>
+    <header className="border-b border-[#1c2e38] bg-[#0c1219] sticky top-0 z-50 shadow-lg">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+        {/* LEFT: Branding */}
+        <div className="flex items-center space-x-3 shrink-0">
+          <div>
+            <h1 className="text-base font-extrabold tracking-wider font-mono text-white flex items-center gap-1.5">
+              <span>LEGACY</span>
+              <span className="text-[#10b981]">RESCUE</span>
+              <span className="text-[10px] uppercase font-mono bg-[#10b981]/10 text-[#10b981] font-bold px-1.5 py-0.5 rounded border border-[#10b981]/20">
+                BuildSprint 2026
+              </span>
+            </h1>
+            <p className="text-[11px] text-slate-400 font-sans">Autonomous Legacy Modernization Platform</p>
           </div>
         </div>
 
-        {/* Backend Connection Health */}
-        <HealthStatus />
+        {/* CENTER: Migration Path */}
+        <div className="hidden md:flex items-center space-x-2 text-xs bg-[#070a0e] border border-[#1c2e38] px-3.5 py-1.5 rounded-xl text-slate-300 font-mono shadow-inner">
+          <Code2 className="w-3.5 h-3.5 text-amber-400" />
+          <span className="font-bold text-slate-200">{sourceTech}</span>
+          <ArrowRight className="w-3 h-3 text-slate-500" />
+          <span className="text-[#10b981] font-bold">{targetTech}</span>
+        </div>
+
+        {/* RIGHT: Backend Connection & Migration Status */}
+        <div className="flex items-center space-x-3 shrink-0">
+          <HealthStatus />
+
+          {/* GitHub PR Badge if shipped */}
+          {shipResult && shipResult.pullRequest ? (
+            <a
+              href={shipResult.pullRequest.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden lg:flex items-center space-x-1.5 bg-[#10b981]/10 hover:bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/30 px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all"
+            >
+              <GitPullRequest className="w-3.5 h-3.5" />
+              <span>PR #{shipResult.pullRequest.number} Created</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          ) : (
+            <div className={`hidden lg:flex items-center space-x-2 px-3 py-1 rounded-lg border text-xs font-mono font-bold uppercase ${
+              stageStatus === 'running'
+                ? 'bg-sky-500/10 text-sky-400 border-sky-500/30 animate-pulse'
+                : stageStatus === 'ready_for_review'
+                ? 'bg-[#10b981]/10 text-[#10b981] border-[#10b981]/30'
+                : stageStatus === 'success'
+                ? 'bg-[#10b981]/20 text-[#10b981] border-[#10b981]/40'
+                : stageStatus === 'error'
+                ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                : 'bg-[#070a0e] text-slate-400 border-[#1c2e38]'
+            }`}>
+              <span>● {status}</span>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

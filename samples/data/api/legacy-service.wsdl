@@ -1,0 +1,8 @@
+<wsdl:definitions name="UserService" targetNamespace="http://legacy.app/users" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">
+  <wsdl:message name="GetUserRequest">
+    <wsdl:part name="userId" type="xsd:string"/>
+  </wsdl:message>
+  <wsdl:operation name="GetUser">
+    <wsdl:input message="tns:GetUserRequest"/>
+  </wsdl:operation>
+</wsdl:definitions>

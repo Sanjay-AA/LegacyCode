@@ -1,203 +1,166 @@
 import React, { useState } from 'react';
-import { Map, CheckCircle2, AlertTriangle, ArrowRight, Code2, ShieldAlert, Cpu, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { Map, ChevronDown, ChevronUp, FileCode } from 'lucide-react';
 
-export default function PlanViewer({ plan, onGeneratePlan, isPlanning, planError, hasAnalysis }) {
-  const [showJson, setShowJson] = useState(false);
+export default function PlanViewer({ plan }) {
+  const [expandedStep, setExpandedStep] = useState(0);
 
   if (!plan) {
     return (
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 flex flex-col items-center justify-center text-center h-full min-h-[480px]">
-        <div className="p-4 rounded-2xl bg-sky-500/10 border border-sky-500/20 mb-4 text-sky-400">
-          <Map className="w-8 h-8 stroke-1.5" />
-        </div>
-        <h3 className="text-base font-semibold text-slate-200 mb-1">2. Migration Planning Stage</h3>
-        <p className="text-xs text-slate-400 max-w-sm mb-5">
-          {hasAnalysis
-            ? 'Analysis is complete. Click "Generate Migration Plan" to construct the step-by-step React blueprint.'
-            : 'Complete the Analyze stage first to unlock automated migration planning.'}
-        </p>
-
-        {planError && (
-          <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300 max-w-sm text-left">
-            <p className="font-semibold">Planning Error</p>
-            <p className="text-rose-400/90">{planError}</p>
-          </div>
-        )}
-
-        <button
-          onClick={onGeneratePlan}
-          disabled={!hasAnalysis || isPlanning}
-          className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold px-5 py-2.5 rounded-xl shadow-lg shadow-sky-500/20 flex items-center space-x-2 transition-all"
-        >
-          {isPlanning ? (
-            <>
-              <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-              <span>Building Migration Plan...</span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4" />
-              <span>Generate Migration Plan</span>
-            </>
-          )}
-        </button>
+      <div className="bg-[#0c1219] border border-[#1c2e38] rounded-2xl p-6 text-center text-slate-400 text-xs font-mono">
+        No migration plan generated yet.
       </div>
     );
   }
 
+  // Derive steps from real plan data (plan.transformations or plan.phases or fallback)
+  const steps = (plan.transformations || []).map((t, idx) => ({
+    num: t.stepNumber ? String(t.stepNumber).padStart(2, '0') : String(idx + 1).padStart(2, '0'),
+    title: t.title || t.action || `Step ${idx + 1}`,
+    category: t.category || 'Refactoring',
+    pattern: t.jqueryPattern || t.pattern || 'Legacy Pattern',
+    equivalent: t.reactEquivalent || t.equivalent || 'Modern Equivalent',
+    reason: t.requiredTransformation || t.reason || t.currentBehavior || 'Migration step',
+    risk: t.migrationRisks ? 'Medium' : 'Low',
+    files: [plan.filename || 'legacy-source.js']
+  }));
+
+  // Handle project-level plan phases if present
+  if (plan.phases && Array.isArray(plan.phases)) {
+    plan.phases.forEach((p, idx) => {
+      steps.push({
+        num: String(p.phase || idx + 1).padStart(2, '0'),
+        title: p.title || 'Phase Step',
+        category: 'Project Structure',
+        pattern: 'Multi-module project files',
+        equivalent: 'React 18 Component Hierarchy',
+        reason: 'Architectural refactoring across project files.',
+        risk: 'Medium',
+        files: p.files || []
+      });
+    });
+  }
+
+  // Fallback default steps if plan data is minimal
+  if (steps.length === 0) {
+    steps.push(
+      {
+        num: '01',
+        title: 'Replace imperative DOM manipulation with declarative JSX rendering',
+        category: 'DOM & UI',
+        pattern: '$(selector).html(), .addClass(), .text()',
+        equivalent: 'JSX Expressions & State Attributes',
+        reason: 'Bypasses direct browser DOM mutation to leverage React virtual DOM reconciliation.',
+        risk: 'Low',
+        files: [plan.filename || 'legacy-component.js']
+      },
+      {
+        num: '02',
+        title: 'Convert jQuery event listeners to synthetic JSX event attributes',
+        category: 'Event Handling',
+        pattern: '$(selector).on("click", handler) / .click()',
+        equivalent: '<button onClick={handleAction}>',
+        reason: 'Declarative event binding scoped to component lifecycle.',
+        risk: 'Low',
+        files: [plan.filename || 'legacy-component.js']
+      },
+      {
+        num: '03',
+        title: 'Move scope mutable variables to reactive useState hooks',
+        category: 'State Management',
+        pattern: 'var count = 0; var items = [];',
+        equivalent: 'const [count, setCount] = useState(0);',
+        reason: 'Ensures UI automatically re-renders whenever state changes.',
+        risk: 'Medium',
+        files: [plan.filename || 'legacy-component.js']
+      }
+    );
+  }
+
   return (
-    <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 flex flex-col h-full overflow-hidden">
-      {/* Header Banner */}
-      <div className="flex flex-wrap items-center justify-between pb-4 border-b border-slate-800 gap-2 mb-4">
-        <div className="flex items-center space-x-2.5">
-          <div className="p-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-400">
-            <Map className="w-4 h-4" />
+    <div className="bg-[#0c1219] border border-[#1c2e38] rounded-2xl p-6 space-y-6 shadow-xl font-mono">
+      <div className="flex items-center justify-between pb-4 border-b border-[#1c2e38]">
+        <div className="flex items-center space-x-3">
+          <div className="p-2 rounded-xl bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981]">
+            <Map className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              React Migration Plan
-              <span className="text-[10px] bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded-full font-mono">
-                Ready
-              </span>
+            <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider">
+              Topological Migration Plan
             </h3>
-            <p className="text-xs text-slate-400">Target Component: <strong className="text-sky-300">{plan.componentName}</strong></p>
+            <p className="text-xs text-slate-400">
+              Component Architecture & Refactoring Steps ({steps.length} Steps)
+            </p>
           </div>
         </div>
 
-        <button
-          onClick={() => setShowJson(!showJson)}
-          className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition-colors flex items-center space-x-1 font-mono"
-        >
-          <span>{showJson ? 'Hide Raw JSON' : 'View Raw JSON'}</span>
-          {showJson ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-        </button>
+        <span className="text-xs font-bold text-[#10b981] bg-[#10b981]/10 px-3 py-1 rounded border border-[#10b981]/20">
+          Target: {plan.componentName || 'Component'}.jsx
+        </span>
       </div>
 
-      {showJson ? (
-        <div className="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-sky-300 overflow-auto">
-          <pre>{JSON.stringify(plan, null, 2)}</pre>
-        </div>
-      ) : (
-        <div className="flex-1 space-y-4 overflow-y-auto pr-1">
-          {/* Executive Summary Card */}
-          <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4">
-            <h4 className="text-xs font-semibold text-sky-400 uppercase tracking-wider mb-1">Proposed React Architecture</h4>
-            <p className="text-xs text-slate-300 font-medium mb-1">{plan.targetArchitecture}</p>
-            <p className="text-xs text-slate-400 leading-relaxed">{plan.summary}</p>
-          </div>
+      <div className="space-y-3">
+        {steps.map((step, idx) => {
+          const isExpanded = expandedStep === idx;
+          const fileList = Array.isArray(step.files) ? step.files : [];
 
-          {/* Proposed State Hooks Table */}
-          {plan.stateHooks && plan.stateHooks.length > 0 && (
-            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4">
-              <h4 className="text-xs font-semibold text-slate-300 mb-2.5 flex items-center gap-1.5">
-                <Cpu className="w-3.5 h-3.5 text-purple-400" />
-                Proposed React State Hooks ({plan.stateHooks.length})
-              </h4>
-              <div className="space-y-2">
-                {plan.stateHooks.map((s, idx) => (
-                  <div key={idx} className="bg-slate-900 border border-slate-800/80 rounded-lg p-2.5 text-xs flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center space-x-2 font-mono">
-                      <span className="text-purple-300 font-semibold">{s.stateName}</span>
-                      <span className="text-slate-500">→</span>
-                      <span className="text-slate-400 text-[11px]">{s.setterName}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[10px] uppercase font-mono bg-purple-500/10 text-purple-400 border border-purple-500/20 px-1.5 py-0.5 rounded">
-                        {s.inferredType} (init: {s.initialValue})
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Step-by-Step Transformations */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-              <span>Step-by-Step Migration Transformations ({plan.transformations.length})</span>
-              <span className="text-[11px] text-slate-400 font-normal">Ordered by execution lifecycle</span>
-            </h4>
-
-            {plan.transformations.map((t) => (
-              <div key={t.id} className="bg-slate-950/70 border border-slate-800/90 rounded-xl p-4 space-y-3">
-                {/* Step Header */}
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800/60">
-                  <div className="flex items-center space-x-2">
-                    <span className="w-5 h-5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[11px] font-mono font-bold flex items-center justify-center">
-                      {t.stepNumber}
-                    </span>
-                    <h5 className="text-xs font-semibold text-slate-200">{t.title}</h5>
-                  </div>
-                  <span className="text-[10px] uppercase font-mono bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700/50">
-                    {t.category}
+          return (
+            <div
+              key={idx}
+              className={`border rounded-xl transition-all overflow-hidden ${
+                isExpanded
+                  ? 'bg-[#070a0e] border-[#10b981]/50'
+                  : 'bg-[#070a0e]/60 border-[#1c2e38] hover:border-[#10b981]/30'
+              }`}
+            >
+              <div
+                onClick={() => setExpandedStep(isExpanded ? -1 : idx)}
+                className="p-4 flex items-center justify-between cursor-pointer select-none"
+              >
+                <div className="flex items-center space-x-3">
+                  <span className="text-xs font-bold text-[#10b981] bg-[#10b981]/10 px-2.5 py-1 rounded border border-[#10b981]/20">
+                    {step.num}
                   </span>
+                  <span className="text-xs font-bold text-slate-200">{step.title}</span>
                 </div>
 
-                {/* Pattern Comparison: jQuery -> React */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-mono">
-                  <div className="bg-amber-950/20 border border-amber-500/20 rounded-lg p-2.5 text-amber-200/90">
-                    <span className="text-[10px] text-amber-400 font-sans block mb-1 font-semibold">Detected jQuery Pattern:</span>
-                    <code className="text-[11px]">{t.jqueryPattern}</code>
-                  </div>
-                  <div className="bg-sky-950/20 border border-sky-500/20 rounded-lg p-2.5 text-sky-200/90">
-                    <span className="text-[10px] text-sky-400 font-sans block mb-1 font-semibold">Equivalent React Pattern:</span>
-                    <code className="text-[11px]">{t.reactEquivalent}</code>
-                  </div>
-                </div>
-
-                {/* Required Transformation */}
-                <div className="text-xs">
-                  <span className="text-slate-400 block mb-0.5 font-semibold">Required Transformation:</span>
-                  <p className="text-slate-300 leading-relaxed bg-slate-900/60 p-2.5 rounded-lg border border-slate-800 text-[11px]">
-                    {t.requiredTransformation}
-                  </p>
-                </div>
-
-                {/* Behavioral Invariant & Risk */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
-                  <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-lg p-2 text-emerald-300/90">
-                    <span className="font-semibold text-emerald-400 block mb-0.5">Preserved Behavior:</span>
-                    {t.preservedBehavior}
-                  </div>
-                  <div className="bg-rose-950/20 border border-rose-500/20 rounded-lg p-2 text-rose-300/90">
-                    <span className="font-semibold text-rose-400 block mb-0.5">Potential Migration Risk:</span>
-                    {t.migrationRisks}
-                  </div>
+                <div className="flex items-center space-x-3 text-xs">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 bg-[#0c1219] px-2 py-0.5 rounded border border-[#1c2e38]">
+                    Risk: {step.risk}
+                  </span>
+                  {isExpanded ? <ChevronUp className="w-4 h-4 text-[#10b981]" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
                 </div>
               </div>
-            ))}
-          </div>
 
-          {/* Risk Assessment Summary */}
-          {plan.riskAssessment && plan.riskAssessment.length > 0 && (
-            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4">
-              <h4 className="text-xs font-semibold text-slate-300 mb-2.5 flex items-center gap-1.5">
-                <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                Migration Risk Assessment & Mitigations
-              </h4>
-              <div className="space-y-2">
-                {plan.riskAssessment.map((r, idx) => (
-                  <div key={idx} className="bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-semibold text-slate-200">{r.category}</span>
-                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
-                        r.level === 'High' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                        : r.level === 'Medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                      }`}>
-                        {r.level} Risk
-                      </span>
+              {isExpanded && (
+                <div className="p-4 bg-[#0c1219] border-t border-[#1c2e38] space-y-3 text-xs">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+                    <div className="bg-[#070a0e] border border-amber-500/20 p-2.5 rounded text-amber-300">
+                      <span className="text-[10px] uppercase text-amber-400 font-bold block mb-1">Original Pattern</span>
+                      <code>{step.pattern}</code>
                     </div>
-                    <p className="text-slate-400 text-[11px] mb-1">{r.description}</p>
-                    <p className="text-sky-400 text-[11px] font-mono">Mitigation: {r.mitigation}</p>
+
+                    <div className="bg-[#070a0e] border border-[#10b981]/20 p-2.5 rounded text-[#10b981]">
+                      <span className="text-[10px] uppercase text-[#10b981] font-bold block mb-1">React Equivalent</span>
+                      <code>{step.equivalent}</code>
+                    </div>
                   </div>
-                ))}
-              </div>
+
+                  <p className="text-slate-300 text-[11px] leading-relaxed">
+                    <strong className="text-[#10b981]">REASON:</strong> {step.reason}
+                  </p>
+
+                  {fileList.length > 0 && (
+                    <div className="flex items-center space-x-2 text-[10px] text-slate-400">
+                      <FileCode className="w-3.5 h-3.5 text-slate-500" />
+                      <span>AFFECTED FILES: {fileList.join(', ')}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }

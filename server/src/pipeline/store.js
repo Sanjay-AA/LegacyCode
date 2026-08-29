@@ -1,10 +1,11 @@
 /**
- * In-memory session store for Legacy Rescue agent state.
- * Holds active analysis results so future stages (Plan, Migrate, etc.) can access them.
+ * In-memory session store for Legacy Rescue agent state with stage checkpoints
+ * and shipping idempotency protection.
  */
 
 class SessionStore {
   constructor() {
+    this.checkpoints = new Map();
     this.session = {
       filename: null,
       rawCode: null,
@@ -14,8 +15,20 @@ class SessionStore {
       migrationSummary: null,
       verificationResult: null,
       shipResult: null,
+      lastStage: 'idle',
       updatedAt: null
     };
+  }
+
+  saveCheckpoint(stage, data) {
+    this.checkpoints.set(stage, {
+      data,
+      savedAt: new Date().toISOString()
+    });
+  }
+
+  getCheckpoint(stage) {
+    return this.checkpoints.get(stage)?.data || null;
   }
 
   setAnalysis(filename, rawCode, analysis) {
@@ -24,8 +37,10 @@ class SessionStore {
       filename,
       rawCode,
       analysis,
+      lastStage: 'analyze',
       updatedAt: new Date().toISOString()
     };
+    this.saveCheckpoint('analyze', { filename, rawCode, analysis });
     return this.session;
   }
 
@@ -33,8 +48,10 @@ class SessionStore {
     this.session = {
       ...this.session,
       plan,
+      lastStage: 'plan',
       updatedAt: new Date().toISOString()
     };
+    this.saveCheckpoint('plan', { plan });
     return this.session;
   }
 
@@ -43,8 +60,10 @@ class SessionStore {
       ...this.session,
       migratedCode,
       migrationSummary: summary,
+      lastStage: 'migrate',
       updatedAt: new Date().toISOString()
     };
+    this.saveCheckpoint('migrate', { migratedCode, summary });
     return this.session;
   }
 
@@ -52,8 +71,10 @@ class SessionStore {
     this.session = {
       ...this.session,
       verificationResult,
+      lastStage: 'verify',
       updatedAt: new Date().toISOString()
     };
+    this.saveCheckpoint('verify', { verificationResult });
     return this.session;
   }
 
@@ -61,8 +82,10 @@ class SessionStore {
     this.session = {
       ...this.session,
       shipResult,
+      lastStage: 'ship',
       updatedAt: new Date().toISOString()
     };
+    this.saveCheckpoint('ship', { shipResult });
     return this.session;
   }
 
@@ -71,6 +94,7 @@ class SessionStore {
   }
 
   clear() {
+    this.checkpoints.clear();
     this.session = {
       filename: null,
       rawCode: null,
@@ -80,6 +104,7 @@ class SessionStore {
       migrationSummary: null,
       verificationResult: null,
       shipResult: null,
+      lastStage: 'idle',
       updatedAt: null
     };
   }

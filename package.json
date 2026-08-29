@@ -2,13 +2,17 @@
   "name": "legacy-rescue",
   "version": "0.1.0",
   "private": true,
-  "description": "Autonomous software modernization agent (jQuery to React)",
+  "description": "Autonomous software modernization agent & multi-stack platform",
   "scripts": {
     "start": "npm run start --prefix server",
     "server": "npm run dev --prefix server",
     "client": "npm run dev --prefix client",
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
-    "install:all": "npm install --prefix server && npm install --prefix client"
+    "install:all": "npm install --prefix server && npm install --prefix client",
+    "test": "node server/test-suite.js",
+    "test:adapters": "node server/test-suite.js --adapters",
+    "test:pipeline": "node server/test-suite.js --pipeline",
+    "test:verification": "node server/test-suite.js --verification"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
