@@ -247,6 +247,7 @@ export default function Dashboard() {
       case 'detect:complete':
         setSession(prev => ({
           ...prev,
+          id: data.sessionId || prev.id,
           detection: data.detection || data.technologies,
           selectedAdapter: data.selectedAdapter,
           currentStage: 'analyze',

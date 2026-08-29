@@ -13,6 +13,7 @@ import { shipMigration } from '../pipeline/shipper.js';
 import { cleanupStaleSessions } from '../services/sessionCleaner.js';
 import { PipelineError } from '../pipeline/errors.js';
 import { createWorkspaceBaseline } from '../workspace/workspaceStatus.js';
+import { ensureWorkspaceForSession } from '../workspace/workspaceService.js';
 
 const router = Router();
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -267,6 +268,7 @@ router.post('/run', async (req, res) => {
     const adapter = migrationRegistry.getAdapter(selectedAdapterId);
 
     emitEvent('detect:complete', {
+      sessionId: activeStore.getSession()?.id,
       detection,
       selectedAdapter: {
         id: adapter.id,
@@ -417,6 +419,8 @@ router.post('/run', async (req, res) => {
     // Verification Succeeded!
     const passCount = verification.metrics?.passedTests || 0;
     const totalCount = verification.metrics?.totalTests || 0;
+
+    ensureWorkspaceForSession();
 
     emitEvent('verify:complete', {
       verification,
