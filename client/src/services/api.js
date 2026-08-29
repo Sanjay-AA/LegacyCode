@@ -45,6 +45,34 @@ export async function detectTechnologyApi(code, filename) {
   return await response.json();
 }
 
+export async function openVSCodeApi(sessionId) {
+  const response = await fetch(`${API_BASE_URL}/workspace/open-vscode`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({ sessionId })
+  });
+
+  const data = await response.json();
+  if (!response.ok || !data.success) {
+    const error = new Error(data.message || 'Failed to open VS Code');
+    error.code = data.error;
+    throw error;
+  }
+  return data;
+}
+
+export async function fetchWorkspaceStatusApi(sessionId) {
+  const url = sessionId ? `${API_BASE_URL}/workspace/status?sessionId=${encodeURIComponent(sessionId)}` : `${API_BASE_URL}/workspace/status`;
+  const response = await fetch(url, {
+    headers: { 'Accept': 'application/json' }
+  });
+  if (!response.ok) return { success: false, changed: false, filesChanged: 0 };
+  return await response.json();
+}
+
 export async function shipMigrationApi() {
   const response = await fetch(`${API_BASE_URL}/ship`, {
     method: 'POST',

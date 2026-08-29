@@ -14,10 +14,10 @@ import MigrationHistory from './MigrationHistory';
 import AdapterDashboard from './AdapterDashboard';
 import VerifyViewer from './VerifyViewer';
 import PlanViewer from './PlanViewer';
-import { runPipelineStream, runProjectPipelineStream, shipMigrationApi, fetchAdaptersApi } from '../services/api';
+import { runPipelineStream, runProjectPipelineStream, shipMigrationApi, fetchAdaptersApi, openVSCodeApi, fetchWorkspaceStatusApi } from '../services/api';
 import {
   RefreshCw, RotateCcw, XCircle, CheckCircle2, ExternalLink, GitPullRequest,
-  Code, Activity, ShieldAlert, FileText, Lightbulb, Network, History, Award, Layers, Map, ShieldCheck, Send, Sparkles
+  Code, Activity, ShieldAlert, FileText, Lightbulb, Network, History, Award, Layers, Map, ShieldCheck, Send, Sparkles, FolderOpen, AlertCircle
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -47,6 +47,8 @@ export default function Dashboard() {
   const [adapters, setAdapters] = useState([]);
   const [history, setHistory] = useState([]);
   const [isShipping, setIsShipping] = useState(false);
+  const [vscodeState, setVscodeState] = useState({ loading: false, success: false, error: null });
+  const [workspaceStatus, setWorkspaceStatus] = useState({ changed: false, filesChanged: 0 });
   const abortControllerRef = useRef(null);
 
   useEffect(() => {
@@ -55,6 +57,23 @@ export default function Dashboard() {
       if (data.history) setHistory(data.history);
     }).catch(console.error);
   }, []);
+
+  const handleOpenVSCode = async () => {
+    setVscodeState({ loading: true, success: false, error: null });
+    try {
+      await openVSCodeApi(session.id);
+      setVscodeState({ loading: false, success: true, error: null });
+      setTimeout(() => {
+        setVscodeState(prev => ({ ...prev, success: false }));
+      }, 3000);
+    } catch (err) {
+      setVscodeState({
+        loading: false,
+        success: false,
+        error: err.message || "VS Code could not be opened. Make sure VS Code is installed and the 'code' command is available in your PATH."
+      });
+    }
+  };
 
   const addTraceLog = (text, type = 'info', timestamp = null) => {
     const timeStr = timestamp || new Date().toLocaleTimeString('en-US', { hour12: false });
@@ -583,12 +602,29 @@ export default function Dashboard() {
                         READY TO SHIP — Waiting for your approval
                       </h3>
                       <p className="text-xs text-slate-300">
-                        Review the modernized code and verification results before creating the GitHub Pull Request.
+                        Continue editing the migrated project locally or review before creating the GitHub Pull Request.
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-3">
+                    {/* OPEN IN VS CODE BUTTON */}
+                    <button
+                      onClick={handleOpenVSCode}
+                      disabled={vscodeState.loading}
+                      className="bg-[#10b981]/10 hover:bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/30 disabled:opacity-50 text-xs font-extrabold font-mono px-4 py-2.5 rounded-xl shadow-md transition-all flex items-center space-x-2"
+                      title="Continue editing the migrated project locally in VS Code"
+                    >
+                      <FolderOpen className="w-4 h-4 stroke-[2.5]" />
+                      <span>
+                        {vscodeState.loading
+                          ? 'Opening VS Code...'
+                          : vscodeState.success
+                          ? 'VS Code Opened ✓'
+                          : 'Open in VS Code'}
+                      </span>
+                    </button>
+
                     <button
                       onClick={() => setActiveTab('workspace')}
                       className="bg-[#111a22] hover:bg-[#16222d] text-slate-200 text-xs font-bold font-mono px-4 py-2.5 rounded-xl border border-[#1c2e38] transition-all"
@@ -614,6 +650,28 @@ export default function Dashboard() {
                     </button>
                   </div>
                 </div>
+
+                {vscodeState.error && (
+                  <div className="bg-rose-950/40 border border-rose-500/40 text-rose-300 p-3 rounded-xl text-xs font-mono flex items-center space-x-2">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>{vscodeState.error}</span>
+                  </div>
+                )}
+
+                {workspaceStatus.changed && (
+                  <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 p-3 rounded-xl text-xs font-mono flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <span>Local Changes Detected ({workspaceStatus.filesChanged} file(s) modified)</span>
+                    </div>
+                    <button
+                      disabled
+                      className="bg-amber-500/20 text-amber-300 text-xs px-3 py-1 rounded-lg border border-amber-500/30 opacity-75 cursor-not-allowed"
+                    >
+                      Verify Local Changes (Coming Soon)
+                    </button>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
                   <div className="bg-[#070a0e] border border-[#1c2e38] p-3 rounded-xl flex items-center space-x-2 text-[#10b981]">
@@ -650,16 +708,35 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <a
-                    href={session.shipResult.pullRequest?.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-[#10b981] hover:bg-emerald-400 text-slate-950 text-xs font-extrabold font-mono px-5 py-2.5 rounded-xl shadow-lg transition-all flex items-center space-x-2"
-                  >
-                    <GitPullRequest className="w-4 h-4 stroke-[2.5]" />
-                    <span>View Pull Request #{session.shipResult.pullRequest?.number}</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
+                  <div className="flex items-center space-x-3">
+                    {/* OPEN IN VS CODE BUTTON ALSO IN SHIPPED BANNER */}
+                    <button
+                      onClick={handleOpenVSCode}
+                      disabled={vscodeState.loading}
+                      className="bg-[#10b981]/10 hover:bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/30 disabled:opacity-50 text-xs font-extrabold font-mono px-4 py-2.5 rounded-xl shadow-md transition-all flex items-center space-x-2"
+                      title="Continue editing the migrated project locally in VS Code"
+                    >
+                      <FolderOpen className="w-4 h-4 stroke-[2.5]" />
+                      <span>
+                        {vscodeState.loading
+                          ? 'Opening VS Code...'
+                          : vscodeState.success
+                          ? 'VS Code Opened ✓'
+                          : 'Open in VS Code'}
+                      </span>
+                    </button>
+
+                    <a
+                      href={session.shipResult.pullRequest?.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-[#10b981] hover:bg-emerald-400 text-slate-950 text-xs font-extrabold font-mono px-5 py-2.5 rounded-xl shadow-lg transition-all flex items-center space-x-2"
+                    >
+                      <GitPullRequest className="w-4 h-4 stroke-[2.5]" />
+                      <span>View Pull Request #{session.shipResult.pullRequest?.number}</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
                 </div>
               </div>
             )}

@@ -7,6 +7,9 @@ class SessionStore {
   constructor() {
     this.checkpoints = new Map();
     this.session = {
+      id: null,
+      workspaceDir: null,
+      workspaceBaseline: null,
       filename: null,
       rawCode: null,
       analysis: null,
@@ -18,6 +21,17 @@ class SessionStore {
       lastStage: 'idle',
       updatedAt: null
     };
+  }
+
+  setWorkspace(sessionId, workspaceDir, baseline = null) {
+    this.session = {
+      ...this.session,
+      id: sessionId,
+      workspaceDir,
+      workspaceBaseline: baseline,
+      updatedAt: new Date().toISOString()
+    };
+    return this.session;
   }
 
   saveCheckpoint(stage, data) {
@@ -96,6 +110,9 @@ class SessionStore {
   clear() {
     this.checkpoints.clear();
     this.session = {
+      id: null,
+      workspaceDir: null,
+      workspaceBaseline: null,
       filename: null,
       rawCode: null,
       analysis: null,

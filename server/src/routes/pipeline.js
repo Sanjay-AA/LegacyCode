@@ -12,6 +12,7 @@ import { historyStore } from '../pipeline/history.js';
 import { shipMigration } from '../pipeline/shipper.js';
 import { cleanupStaleSessions } from '../services/sessionCleaner.js';
 import { PipelineError } from '../pipeline/errors.js';
+import { createWorkspaceBaseline } from '../workspace/workspaceStatus.js';
 
 const router = Router();
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -104,6 +105,8 @@ router.post('/run-project', async (req, res) => {
 
     const buffer = Buffer.from(projectZipBase64, 'base64');
     const extraction = extractProjectZip(buffer, filename);
+    const baseline = createWorkspaceBaseline(extraction.sessionDir);
+    activeStore.setWorkspace(extraction.sessionId, extraction.sessionDir, baseline);
     const projectAnalysis = analyzeProject(extraction.sessionDir, extraction.extractedFiles);
 
     // Secret Detection Guard
@@ -150,6 +153,8 @@ router.post('/run-project', async (req, res) => {
     await delay(600);
 
     let projectMigrationResult = migrateProject(extraction.sessionDir, projectAnalysis, adapterId, simulateFailure ? 'Simulate Disparity' : null);
+    const updatedBaseline = createWorkspaceBaseline(extraction.sessionDir);
+    activeStore.setWorkspace(extraction.sessionId, extraction.sessionDir, updatedBaseline);
     activeStore.setMigration(projectMigrationResult.mainAppCode, projectMigrationResult.projectDiff);
 
     emitEvent('migrate:complete', {

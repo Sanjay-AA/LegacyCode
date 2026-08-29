@@ -6,6 +6,7 @@ import migrateRouter from './migrate.js';
 import verifyRouter from './verify.js';
 import shipRouter from './ship.js';
 import pipelineRouter from './pipeline.js';
+import workspaceRouter from './workspace.js';
 
 const router = Router();
 
@@ -16,5 +17,6 @@ router.use('/migrate', migrateRouter);
 router.use('/verify', verifyRouter);
 router.use('/ship', shipRouter);
 router.use('/pipeline', pipelineRouter);
+router.use('/workspace', workspaceRouter);
 
 export default router;

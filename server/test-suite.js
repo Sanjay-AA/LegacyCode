@@ -57,7 +57,10 @@ function getRepoRoot() {
   return process.cwd();
 }
 
+import { runWorkspaceTests } from './workspace-test.js';
+
 async function runTestSuite() {
+  await runWorkspaceTests();
   console.log('==================================================');
   console.log('LEGACY RESCUE AUTOMATED TEST SUITE');
   console.log('==================================================\n');
