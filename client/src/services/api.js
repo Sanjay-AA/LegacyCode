@@ -46,13 +46,18 @@ export async function detectTechnologyApi(code, filename) {
 }
 
 export async function openVSCodeApi(sessionId, sessionData = null) {
+  const activeId = sessionId || sessionData?.id;
   const response = await fetch(`${API_BASE_URL}/workspace/open-vscode`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json'
     },
-    body: JSON.stringify({ sessionId, sessionData })
+    body: JSON.stringify({
+      sessionId: activeId,
+      migrationId: activeId,
+      sessionData
+    })
   });
 
   const data = await response.json();

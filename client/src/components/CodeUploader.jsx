@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, FolderArchive, Code2, Sparkles, Trash2, ArrowRight, AlertTriangle } from 'lucide-react';
+import { Upload, FolderArchive, Code2, Sparkles, Trash2, ArrowRight, AlertTriangle, FileCode } from 'lucide-react';
 import { validateCodeInput } from '../services/inputValidator';
 
 const SAMPLE_JQUERY_CODE = `// Legacy User Signup & Preferences jQuery Component
@@ -90,11 +90,12 @@ export default function CodeUploader({
   error = null
 }) {
   const fileInputRef = useRef(null);
+  const zipInputRef = useRef(null);
   const folderInputRef = useRef(null);
   const textareaRef = useRef(null);
   const lineNumbersRef = useRef(null);
 
-  const [inputMode, setInputMode] = useState('upload'); // 'upload' | 'paste'
+  const [inputMode, setInputMode] = useState('single'); // 'single' | 'project' | 'paste'
   const [dragActive, setDragActive] = useState(false);
   const [validationError, setValidationError] = useState(null);
 
@@ -157,13 +158,15 @@ export default function CodeUploader({
         const check = validateCodeInput(codeContent, filename);
         if (!check.valid) {
           setValidationError({
-            title: check.title,
-            message: check.message
+            title: 'Invalid file',
+            message: 'Please upload a valid source-code file for modernization.'
           });
           return;
         }
+
+        const detected = detectLanguageLocal(codeContent, filename);
         if (onUpload) {
-          onUpload(codeContent, filename, selectedAdapterId);
+          onUpload(codeContent, filename, detected.adapterId);
         }
       };
       reader.readAsText(file);
@@ -248,33 +251,46 @@ export default function CodeUploader({
       {/* HERO TITLE & SUBTITLE */}
       <div className="text-center space-y-2">
         <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight font-mono uppercase">
-          MODERNIZE YOUR LEGACY PROJECT
+          MODERNIZE YOUR LEGACY CODE
         </h2>
         <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto">
-          Upload your project or paste legacy source code.
+          Upload a legacy source file and let Legacy Rescue detect and modernize it.
         </p>
       </div>
 
-      {/* SEGMENTED CONTROL / TABS: [ Upload Project ] [ Paste Code ] */}
+      {/* SEGMENTED CONTROL / TABS: [ Upload Legacy File ] [ Upload Full Project ] [ Paste Code ] */}
       <div className="flex items-center justify-center">
-        <div className="inline-flex items-center bg-[#0c1219] p-1.5 rounded-xl border border-[#1c2e38] text-xs font-mono font-bold shadow-lg">
+        <div className="inline-flex items-center bg-[#0c1219] p-1.5 rounded-xl border border-[#1c2e38] text-xs font-mono font-bold shadow-lg overflow-x-auto">
           <button
             type="button"
-            onClick={() => { setValidationError(null); setInputMode('upload'); }}
-            className={`px-5 py-2 rounded-lg transition-all flex items-center space-x-2 ${
-              inputMode === 'upload'
+            onClick={() => { setValidationError(null); setInputMode('single'); }}
+            className={`px-4 py-2 rounded-lg transition-all flex items-center space-x-2 ${
+              inputMode === 'single'
+                ? 'bg-[#1c2e38] text-[#10b981] shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <FileCode className="w-4 h-4" />
+            <span>Upload Legacy File</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setValidationError(null); setInputMode('project'); }}
+            className={`px-4 py-2 rounded-lg transition-all flex items-center space-x-2 ${
+              inputMode === 'project'
                 ? 'bg-[#1c2e38] text-[#10b981] shadow-md'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <FolderArchive className="w-4 h-4" />
-            <span>Upload Project</span>
+            <span>Upload Full Project</span>
           </button>
 
           <button
             type="button"
             onClick={() => { setValidationError(null); setInputMode('paste'); }}
-            className={`px-5 py-2 rounded-lg transition-all flex items-center space-x-2 ${
+            className={`px-4 py-2 rounded-lg transition-all flex items-center space-x-2 ${
               inputMode === 'paste'
                 ? 'bg-[#1c2e38] text-[#10b981] shadow-md'
                 : 'text-slate-400 hover:text-slate-200'
@@ -287,9 +303,9 @@ export default function CodeUploader({
       </div>
 
       {/* ========================================================
-          OPTION 1 — UPLOAD PROJECT VIEW
+          OPTION 1 — PRIMARY VIEW: UPLOAD LEGACY FILE (SINGLE FILE)
          ======================================================== */}
-      {inputMode === 'upload' && (
+      {inputMode === 'single' && (
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -302,32 +318,85 @@ export default function CodeUploader({
           }`}
         >
           <div className="p-4 rounded-2xl bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981] mb-4">
+            <FileCode className="w-10 h-10 stroke-[1.5]" />
+          </div>
+
+          <h3 className="text-base sm:text-lg font-bold text-white mb-1 font-mono">
+            Upload Legacy Code
+          </h3>
+
+          <p className="text-xs text-slate-400 max-w-md mb-6 font-mono">
+            Upload a legacy source file and let Legacy Rescue detect and modernize it.
+          </p>
+
+          <div className="flex flex-col items-center space-y-4" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              disabled={isProcessing}
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-[#10b981] hover:bg-emerald-400 text-slate-950 font-mono font-bold text-xs sm:text-sm px-8 py-3.5 rounded-xl transition-all shadow-lg flex items-center space-x-2"
+            >
+              <Upload className="w-4 h-4 stroke-[2.5]" />
+              <span>Upload Legacy File</span>
+            </button>
+
+            <span className="text-[11px] text-slate-500 font-mono">
+              Supported source files: JS, Java, PHP, Python, SQL, and other supported types.
+            </span>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".js, .jsx, .ts, .tsx, .php, .java, .py, .rb, .sql, .kt, .cs, .wsdl, .sh, .json, .xml, */*"
+              onChange={handleFileInputChange}
+              className="hidden"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          OPTION 2 — UPLOAD FULL PROJECT (ZIP / FOLDER)
+         ======================================================== */}
+      {inputMode === 'project' && (
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => zipInputRef.current?.click()}
+          className={`border-2 border-dashed rounded-2xl p-12 sm:p-16 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 ${
+            dragActive
+              ? 'border-[#10b981] bg-[#10b981]/10 scale-[1.01]'
+              : 'border-[#1c2e38] bg-[#0c1219] hover:border-[#10b981]/60 hover:bg-[#0e1721]'
+          }`}
+        >
+          <div className="p-4 rounded-2xl bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981] mb-4">
             <FolderArchive className="w-10 h-10 stroke-[1.5]" />
           </div>
 
           <h3 className="text-base sm:text-lg font-bold text-white mb-1 font-mono">
-            Upload your project
+            Upload Full Project Archive
           </h3>
 
           <p className="text-xs text-slate-400 max-w-md mb-6 font-mono">
-            Drop ZIP or project folder here
+            Drop ZIP archive or full project folder here
           </p>
 
           <div className="flex items-center space-x-3" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               disabled={isProcessing}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => zipInputRef.current?.click()}
               className="bg-[#10b981] hover:bg-emerald-400 text-slate-950 font-mono font-bold text-xs px-6 py-3 rounded-xl transition-all shadow-lg flex items-center space-x-2"
             >
               <Upload className="w-4 h-4 stroke-[2.5]" />
-              <span>Browse Files</span>
+              <span>Browse Project ZIP</span>
             </button>
 
             <input
-              ref={fileInputRef}
+              ref={zipInputRef}
               type="file"
-              accept=".zip, .js, .jsx, .ts, .tsx, .php, .java, .py, .rb, .sql, .kt, .cs, .json, .xml, */*"
+              accept=".zip, .tar, .gz, */*"
               onChange={handleFileInputChange}
               className="hidden"
             />
@@ -345,7 +414,7 @@ export default function CodeUploader({
       )}
 
       {/* ========================================================
-          OPTION 2 — PASTE CODE VIEW (LINE-NUMBERED CODE EDITOR)
+          OPTION 3 — PASTE CODE VIEW (LINE-NUMBERED CODE EDITOR)
          ======================================================== */}
       {inputMode === 'paste' && (
         <div className="space-y-4 font-mono">

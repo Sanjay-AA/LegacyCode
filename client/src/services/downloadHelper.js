@@ -2,20 +2,26 @@
  * Helper utility for downloading modernized code files and project archives.
  */
 
+const API_BASE_URL = typeof window !== 'undefined'
+  ? `${window.location.protocol}//${window.location.hostname}:5000/api`
+  : 'http://localhost:5000/api';
+
 export function downloadModernizedProject(session) {
   if (!session) return;
 
-  const { filename, migratedCode, componentName, projectDiff } = session;
+  const { id, filename, migratedCode, componentName, projectDiff, isProject } = session;
 
-  // If we have a multi-file project diff
-  if (projectDiff && Array.isArray(projectDiff) && projectDiff.length > 0) {
-    projectDiff.forEach(fileItem => {
-      if (fileItem.content || fileItem.code || fileItem.migratedContent) {
-        const fileContent = fileItem.content || fileItem.code || fileItem.migratedContent;
-        const name = fileItem.filename || fileItem.path || 'migrated-file';
-        triggerDownload(name, fileContent);
-      }
-    });
+  // Multi-file project ZIP archive download
+  if (isProject || (projectDiff && Array.isArray(projectDiff) && projectDiff.length > 1)) {
+    const downloadUrl = `${API_BASE_URL}/workspace/download-zip?sessionId=${encodeURIComponent(id || '')}`;
+    
+    // Direct browser ZIP download
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `modernized-${filename || 'project'}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
     return;
   }
 

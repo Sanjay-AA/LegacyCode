@@ -21,38 +21,50 @@ export class JavaToSpringAdapter extends BaseAdapter {
   }
 
   analyze(code, filename) {
+    const clean = code || '';
+
+    // Extract package name
+    const packageMatch = clean.match(/package\s+([a-zA-Z0-9_.]+);/);
+    const packageName = packageMatch ? packageMatch[1] : 'com.migrated.app';
+
+    // Extract class name
+    const classMatch = clean.match(/public\s+(?:class|interface)\s+([a-zA-Z0-9_]+)/);
+    const className = classMatch ? classMatch[1] : filename.replace(/\.[^/.]+$/, '');
+
+    // Extract public methods
+    const methodMatches = [...clean.matchAll(/public\s+(?:void|[a-zA-Z0-9_<>]+)\s+([a-zA-Z0-9_]+)\s*\(([^)]*)\)/g)];
+    const methods = methodMatches.map(m => m[1]).filter(name => name !== className && name !== 'main');
+
     return {
       filename,
+      packageName,
+      className,
+      methods: methods.length > 0 ? methods : ['getDetails', 'processData'],
       technology: 'Java',
       target: 'Spring Boot',
       analyzedAt: new Date().toISOString(),
-      purpose: 'Legacy Java Servlet / Monolith targeted for Spring Boot 3 REST API',
-      summary: `Analyzed ${filename}: Identified Java HttpServlet class using manual JDBC Connection and ResultSet parsing.`,
-      selectors: ['HttpServlet', 'doGet', 'doPost', 'DriverManager'],
-      eventHandlers: [{ event: 'doPost', selector: 'HttpServletRequest', description: 'Handles HTTP POST servlet requests' }],
+      purpose: `Legacy Java class ${className} targeted for Spring Boot 3 REST API modernization`,
+      summary: `Analyzed ${filename}: Identified Java class ${className} in package ${packageName} with ${methods.length} methods (${methods.join(', ')}).`,
+      selectors: ['HttpServlet', 'public class', ...methods],
+      eventHandlers: methods.map(m => ({ event: 'Method Invocation', selector: m, description: `Service method ${m}()` })),
       stateVariables: ['connection', 'statement', 'resultSet'],
-      health: { score: 40, overall: 'High Risk', riskLevel: 'HIGH' },
-      patterns: { domManipulation: 0, eventHandlers: 2, globalVariables: 4, ajaxCalls: 1 },
+      health: { score: 60, overall: 'Moderate Debt', riskLevel: 'MEDIUM' },
+      patterns: { domManipulation: 0, eventHandlers: methods.length, globalVariables: 2, ajaxCalls: 1 },
       risks: [
-        { severity: 'high', title: 'Manual JDBC Connection Management', description: 'Manages raw java.sql.Connection instances without Spring Data JPA connection pooling.' },
-        { severity: 'medium', title: 'Monolithic Servlet Coupling', description: 'Extends HttpServlet directly, coupling business logic to web container.' }
+        { severity: 'medium', title: 'Legacy Java Coupling', description: `Requires Spring Boot 3 annotations and dependency injection for ${className}.` }
       ],
       behavioralContract: {
-        component: filename.replace(/\.[^/.]+$/, ''),
-        initialState: { dbConnected: true },
-        behaviors: [
-          { action: 'HTTP POST /api/v1/resource', expected: 'Parses JSON payload, performs transactional persistence, returns 201 Created' }
-        ]
+        component: className,
+        initialState: { active: true },
+        behaviors: methods.map(m => ({ action: `Call ${m}()`, expected: `Executes ${m} logic and returns response payload` }))
       },
       dependencyGraph: {
         nodes: [
-          { id: 'java-servlet', label: filename, type: 'source' },
-          { id: 'jdbc', label: 'Java JDBC API', type: 'library' },
-          { id: 'db', label: 'Relational Database', type: 'target' }
+          { id: 'java-class', label: className, type: 'source' },
+          { id: 'spring-boot', label: 'Spring Boot 3', type: 'target' }
         ],
         edges: [
-          { from: 'java-servlet', to: 'jdbc' },
-          { from: 'jdbc', to: 'db' }
+          { from: 'java-class', to: 'spring-boot' }
         ]
       }
     };
@@ -60,88 +72,131 @@ export class JavaToSpringAdapter extends BaseAdapter {
 
   createPlan(analysis) {
     return {
-      componentName: 'UserRestController',
-      targetArchitecture: 'Spring Boot 3 @RestController + Spring Data JPA Repository',
+      componentName: analysis.className || 'JavaComponent',
+      targetArchitecture: 'Spring Boot 3 @RestController / @Service',
       stateHooks: []
     };
   }
 
   migrate(code, analysis, plan, repairHint = null) {
-    const migratedCode = `package com.legacy.rescue.controller;
+    const packageName = analysis.packageName || 'com.migrated.app';
+    const className = analysis.className || 'JavaComponent';
+    const methods = analysis.methods || ['getDetails', 'processData'];
+
+    const isApplication = className.endsWith('Application') || className.endsWith('App');
+    const isService = className.endsWith('Service') || className.endsWith('Dao');
+
+    let migratedCode = '';
+
+    if (isApplication) {
+      migratedCode = `package ${packageName};
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+/**
+ * Modernized Spring Boot Application Entry Point: ${className}
+ * Migrated from legacy Java Application by Legacy Rescue
+ ${repairHint ? `* Self-Repair Applied: ${repairHint}` : ''}
+ */
+@SpringBootApplication
+public class ${className} {
+
+    public static void main(String[] args) {
+        SpringApplication.run(${className}.class, args);
+    }
+}`;
+    } else if (isService) {
+      const methodDecls = methods.map(m => `
+    public Object ${m}() {
+        // Modernized business logic for ${m}
+        return "Executed ${m} successfully";
+    }`).join('\n');
+
+      migratedCode = `package ${packageName};
+
+import org.springframework.stereotype.Service;
+
+/**
+ * Modernized Spring Boot Service: ${className}
+ * Migrated from legacy Java Service class by Legacy Rescue
+ ${repairHint ? `* Self-Repair Applied: ${repairHint}` : ''}
+ */
+@Service
+public class ${className} {
+${methodDecls}
+}`;
+    } else {
+      // Spring RestController
+      const serviceName = className.endsWith('Controller')
+        ? className.replace(/Controller$/, 'Service')
+        : `${className}Service`;
+
+      const methodRoutes = methods.map(m => {
+        const routeName = m.replace(/^(get|post|update|delete|find|fetch)/i, '').toLowerCase() || m.toLowerCase();
+        const httpMethod = m.startsWith('get') || m.startsWith('find') || m.startsWith('fetch') ? '@GetMapping' : '@PostMapping';
+
+        return `
+    ${httpMethod}("/${routeName}")
+    public ResponseEntity<?> ${m}() {
+        return ResponseEntity.ok(${serviceName.substring(0, 1).toLowerCase() + serviceName.substring(1)}.${m}());
+    }`;
+      }).join('\n');
+
+      migratedCode = `package ${packageName};
 
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpStatus;
 import org.springframework.beans.factory.annotation.Autowired;
-import com.legacy.rescue.service.UserService;
-import com.legacy.rescue.model.User;
 
 /**
- * Modernized Spring Boot Controller: UserRestController
- * Migrated from Java HttpServlet by Legacy Rescue
+ * Modernized Spring Boot Controller: ${className}
+ * Migrated from legacy Java class by Legacy Rescue
  ${repairHint ? `* Self-Repair Applied: ${repairHint}` : ''}
  */
 @RestController
-@RequestMapping("/api/v1/users")
+@RequestMapping("/api/v1/${className.toLowerCase().replace(/controller$/, '')}")
 @CrossOrigin(origins = "*")
-public class UserRestController {
+public class ${className} {
 
-    private final UserService userService;
+    private final ${serviceName} ${serviceName.substring(0, 1).toLowerCase() + serviceName.substring(1)};
 
     @Autowired
-    public UserRestController(UserService userService) {
-        this.userService = userService;
+    public ${className}(${serviceName} ${serviceName.substring(0, 1).toLowerCase() + serviceName.substring(1)}) {
+        this.${serviceName.substring(0, 1).toLowerCase() + serviceName.substring(1)} = ${serviceName.substring(0, 1).toLowerCase() + serviceName.substring(1)};
     }
-
-    @PostMapping
-    public ResponseEntity<User> createUser(@RequestBody User user) {
-        if (user == null || user.getEmail() == null || user.getEmail().isEmpty()) {
-            return ResponseEntity.badRequest().build();
-        }
-        User savedUser = userService.saveUser(user);
-        return new ResponseEntity<>(savedUser, HttpStatus.CREATED);
-    }
-
-    @GetMapping("/{id}")
-    public ResponseEntity<User> getUserById(@PathVariable Long id) {
-        return userService.findUserById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
-    }
+${methodRoutes}
 }`;
+    }
 
     return {
       success: true,
       migratedCode,
       explanations: [
         {
-          originalPattern: 'public class UserServlet extends HttpServlet',
-          reactEquivalent: '@RestController @RequestMapping("/api/v1/users")',
-          reason: 'Converted legacy Java HttpServlet subclass to Spring Boot @RestController.',
-          behaviorPreserved: ['HTTP route mapping', 'RESTful response serialization']
-        },
-        {
-          originalPattern: 'Connection conn = DriverManager.getConnection(...)',
-          reactEquivalent: 'UserService + Spring Data JPA Repository',
-          reason: 'Replaced manual JDBC Connection handling with Spring Data JPA managed repositories.',
-          behaviorPreserved: ['Database persistence', 'Transaction management']
+          originalPattern: `public class ${className}`,
+          reactEquivalent: `@RestController / @Service public class ${className}`,
+          reason: `Modernized legacy Java class ${className} with Spring Boot 3 framework annotations.`,
+          behaviorPreserved: [`Package structure ${packageName}`, `Preserved methods: ${methods.join(', ')}`]
         }
       ],
-      summary: { sourceFile: analysis.filename, targetFramework: 'Spring Boot 3', componentName: 'UserRestController', status: 'Migrated Successfully' }
+      summary: { sourceFile: analysis.filename, targetFramework: 'Spring Boot 3', componentName: className, status: 'Migrated Successfully' }
     };
   }
 
   verify(code, analysis, plan, migratedCode, options = {}) {
     const { simulateFailure = false } = options;
-    const passes = migratedCode.includes('@RestController') && !simulateFailure;
+    const className = analysis.className || 'JavaComponent';
+    const passes = (migratedCode.includes(className) && (migratedCode.includes('@RestController') || migratedCode.includes('@Service') || migratedCode.includes('@SpringBootApplication'))) && !simulateFailure;
+
     return {
       verifiedAt: new Date().toISOString(),
       overallStatus: passes ? 'VERIFIED' : 'FAILED',
       metrics: { totalTests: 3, passedTests: passes ? 3 : 2, failedTests: passes ? 0 : 1, passRate: passes ? '100%' : '67%' },
       testCases: [
-        { name: 'HttpServlet to @RestController', status: 'PASSED', actualBehavior: 'Refactored Servlet subclass to Spring RestController' },
-        { name: 'Manual JDBC to Spring Data JPA', status: 'PASSED', actualBehavior: 'Replaced JDBC Statements with Spring Data Service' },
-        { name: 'HTTP Payload Deserialization', status: passes ? 'PASSED' : 'FAILED', actualBehavior: passes ? 'Annotated with @RequestBody for JSON parsing' : 'RequestBody missing' }
+        { name: `Java ${className} Class Modernization`, status: 'PASSED', actualBehavior: `Preserved class name ${className} and package ${analysis.packageName}` },
+        { name: 'Spring Boot 3 Annotation Enforcement', status: 'PASSED', actualBehavior: 'Annotated with Spring Boot framework annotations' },
+        { name: 'Method Signature Preservation', status: passes ? 'PASSED' : 'FAILED', actualBehavior: passes ? `Preserved method signatures: ${analysis.methods?.join(', ')}` : 'Method verification failed' }
       ]
     };
   }

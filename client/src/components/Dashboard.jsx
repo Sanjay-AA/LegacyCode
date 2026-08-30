@@ -119,7 +119,7 @@ export default function Dashboard() {
       setVscodeState({
         loading: false,
         success: false,
-        error: err.message || "Could not open VS Code. Ensure VS Code is installed and 'code' is in PATH."
+        error: err.message || "VS Code could not be opened. Please make sure VS Code is installed and the 'code' command is available in your PATH."
       });
     }
   };
@@ -817,13 +817,9 @@ export default function Dashboard() {
                   <h2 className="text-xl font-extrabold text-white tracking-wide uppercase">
                     MIGRATION COMPLETE
                   </h2>
-                  <p className="text-xs text-slate-400 font-sans">
-                    Your project has been successfully modernized.
-                  </p>
-                  <div className="flex items-center justify-center space-x-2 text-xs text-[#10b981] font-bold pt-0.5">
-                    <span>{activeSourceTech}</span>
-                    <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
-                    <span>{activeTargetTech}</span>
+                  <div className="text-xs text-slate-300 font-sans space-y-0.5 pt-1">
+                    <p>Original File: <strong className="text-white font-mono">{session.filename || 'Source Code'}</strong></p>
+                    <p>Detected: <strong className="text-amber-400 font-mono">{activeSourceTech}</strong> &nbsp;→&nbsp; Modernized To: <strong className="text-[#10b981] font-mono">{activeTargetTech}</strong></p>
                   </div>
                 </div>
 
@@ -837,13 +833,13 @@ export default function Dashboard() {
 
                 {/* PRIMARY ACTIONS: DOWNLOAD (PRIMARY), VS CODE (SECONDARY), PR (TERTIARY) */}
                 <div className="flex flex-wrap items-center justify-center gap-3 max-w-xl mx-auto pt-1">
-                  {/* Download Modernized Project Button (PRIMARY ACTION) */}
+                  {/* Download Modernized Project / File Button (PRIMARY ACTION) */}
                   <button
                     onClick={() => downloadModernizedProject(session)}
                     className="bg-[#10b981] hover:bg-emerald-400 text-slate-950 text-xs font-extrabold font-mono px-5 py-2.5 rounded-xl shadow-lg transition-all flex items-center space-x-2"
                   >
                     <Download className="w-4 h-4 stroke-[2.5]" />
-                    <span>Download Modernized Project</span>
+                    <span>{session.isProject ? 'Download Modernized Project' : 'Download Modernized File'}</span>
                   </button>
 
                   {/* Open in VS Code Button (SECONDARY) */}

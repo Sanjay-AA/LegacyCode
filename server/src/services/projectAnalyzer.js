@@ -16,71 +16,119 @@ export function analyzeProject(sessionDir, extractedFiles) {
   };
 
   const fileContentsMap = new Map();
+  const projectManifest = [];
 
   for (const file of extractedFiles) {
     const fullPath = path.join(sessionDir, file.relativePath);
     const ext = file.extension;
+    const relPath = file.relativePath;
 
     // Detect sensitive files
-    if (file.relativePath.includes('.env') || file.relativePath.includes('credentials') || file.relativePath.includes('id_rsa')) {
-      inventory.sensitiveFiles.push(file.relativePath);
+    if (relPath.includes('.env') || relPath.includes('credentials') || relPath.includes('id_rsa')) {
+      inventory.sensitiveFiles.push(relPath);
       continue;
     }
 
     if (['.js', '.jsx', '.ts', '.tsx', '.vue'].includes(ext)) {
-      inventory.javaScriptFiles.push(file.relativePath);
+      inventory.javaScriptFiles.push(relPath);
     } else if (['.html', '.htm'].includes(ext)) {
-      inventory.htmlFiles.push(file.relativePath);
+      inventory.htmlFiles.push(relPath);
     } else if (['.css', '.scss', '.less'].includes(ext)) {
-      inventory.cssFiles.push(file.relativePath);
-    } else if (['.rb', '.php', '.java', '.py', '.cs', '.go'].includes(ext) || file.relativePath === 'Gemfile') {
-      inventory.backendFiles.push(file.relativePath);
+      inventory.cssFiles.push(relPath);
+    } else if (['.rb', '.php', '.java', '.py', '.cs', '.go'].includes(ext) || relPath === 'Gemfile') {
+      inventory.backendFiles.push(relPath);
     } else if (['.sql', '.wsdl', '.json', '.prisma'].includes(ext)) {
-      inventory.dataFiles.push(file.relativePath);
+      inventory.dataFiles.push(relPath);
     } else if (['.png', '.jpg', '.jpeg', '.svg', '.ico', '.zip', '.tar', '.gz'].includes(ext)) {
-      inventory.assetFiles.push(file.relativePath);
-      continue; // Skip reading binary assets
+      inventory.assetFiles.push(relPath);
+      continue; // Skip reading binary assets into text map
     } else {
-      inventory.configFiles.push(file.relativePath);
+      inventory.configFiles.push(relPath);
     }
 
     try {
-      if (file.sizeBytes < 2 * 1024 * 1024) { // Read text files < 2MB
+      if (file.sizeBytes < 5 * 1024 * 1024) { // Read text files < 5MB
         const content = fs.readFileSync(fullPath, 'utf-8');
-        fileContentsMap.set(file.relativePath, content);
+        fileContentsMap.set(relPath, content);
       }
     } catch (_) {}
   }
 
   // Detect multi-stack technologies across all project files
   const stackDetection = detectProjectStack(fileContentsMap);
+
+  // Build Project Manifest for every file in the workspace
+  for (const [relPath, content] of fileContentsMap.entries()) {
+    const fileMeta = stackDetection.fileOwnership[relPath];
+    const ext = path.extname(relPath).toLowerCase();
+
+    let category = 'config';
+    if (inventory.javaScriptFiles.includes(relPath) || inventory.htmlFiles.includes(relPath)) category = 'frontend';
+    else if (inventory.backendFiles.includes(relPath)) category = 'backend';
+    else if (inventory.dataFiles.includes(relPath)) category = 'database';
+
+    projectManifest.push({
+      relativePath: relPath,
+      filename: path.basename(relPath),
+      extension: ext,
+      detectedTechnology: fileMeta ? fileMeta.technology : 'Configuration/Asset',
+      category: fileMeta ? fileMeta.layer : category,
+      isSupported: Boolean(fileMeta && fileMeta.adapterId),
+      adapterId: fileMeta ? fileMeta.adapterId : null,
+      targetTechnology: fileMeta ? fileMeta.target : null
+    });
+  }
+
+  // Build Dynamic Architecture Nodes & Edges from Actual Project Manifest
+  const nodes = [
+    { id: 'user-client', label: 'User / Browser Client', type: 'client' }
+  ];
+  const edges = [];
+
+  const frontendFiles = projectManifest.filter(m => m.category === 'frontend' || m.category === 'web');
+  const backendFiles = projectManifest.filter(m => m.category === 'backend');
+  const dbFiles = projectManifest.filter(m => m.category === 'database' || m.category === 'data');
+  const infraFiles = projectManifest.filter(m => m.category === 'infrastructure');
+
+  if (frontendFiles.length > 0) {
+    const frontendTech = stackDetection.migrations.find(m => m.layer === 'frontend' || m.layer === 'web')?.source || 'Frontend';
+    const frontendLabel = `${frontendTech} (${frontendFiles.length} file(s))`;
+    nodes.push({ id: 'frontend-layer', label: frontendLabel, type: 'frontend' });
+    edges.push({ from: 'user-client', to: 'frontend-layer' });
+  }
+
+  if (backendFiles.length > 0) {
+    const backendTech = stackDetection.migrations.find(m => m.layer === 'backend')?.source || 'Backend';
+    const backendLabel = `${backendTech} Services (${backendFiles.length} file(s))`;
+    nodes.push({ id: 'backend-layer', label: backendLabel, type: 'backend' });
+    if (frontendFiles.length > 0) {
+      edges.push({ from: 'frontend-layer', to: 'backend-layer' });
+    } else {
+      edges.push({ from: 'user-client', to: 'backend-layer' });
+    }
+  }
+
+  if (dbFiles.length > 0) {
+    const dbTech = stackDetection.migrations.find(m => m.layer === 'database' || m.layer === 'data')?.source || 'Database';
+    const dbLabel = `${dbTech} Persistence Layer (${dbFiles.length} file(s))`;
+    nodes.push({ id: 'db-layer', label: dbLabel, type: 'database' });
+    if (backendFiles.length > 0) {
+      edges.push({ from: 'backend-layer', to: 'db-layer' });
+    } else if (frontendFiles.length > 0) {
+      edges.push({ from: 'frontend-layer', to: 'db-layer' });
+    }
+  }
+
+  if (infraFiles.length > 0) {
+    nodes.push({ id: 'infra-layer', label: 'Infrastructure & IaC', type: 'infrastructure' });
+  }
+
   const technologies = stackDetection.technologies.map(t => ({
     name: `${t.technology} (${t.layer})`,
     confidence: t.confidence,
     layer: t.layer,
     source: t.technology
   }));
-
-  // Build Project Dependency Graph
-  const nodes = [
-    { id: 'app-root', label: 'Legacy Project Root', type: 'source' }
-  ];
-  const edges = [];
-
-  inventory.htmlFiles.forEach(f => {
-    nodes.push({ id: f, label: f, type: 'target' });
-    edges.push({ from: 'app-root', to: f });
-  });
-
-  inventory.javaScriptFiles.forEach(f => {
-    nodes.push({ id: f, label: f, type: 'source' });
-    edges.push({ from: 'app-root', to: f });
-  });
-
-  inventory.backendFiles.forEach(f => {
-    nodes.push({ id: f, label: f, type: 'source' });
-    edges.push({ from: 'app-root', to: f });
-  });
 
   // Calculate Project Health & Risk
   let domMutationsCount = 0;
@@ -130,15 +178,18 @@ export function analyzeProject(sessionDir, extractedFiles) {
       phase: idx + 1,
       title: `Migrate ${m.layer.toUpperCase()} Layer: ${m.source} → ${m.target}`,
       description: `Transform ${m.layer} legacy modules to modern ${m.target} structure`,
-      files: Object.entries(stackDetection.fileOwnership).filter(([_, info]) => info.adapterId === m.adapterId).map(([p]) => p)
+      files: projectManifest.filter(p => p.adapterId === m.adapterId).map(p => p.relativePath)
     }))
   };
 
   return {
     inventory,
+    projectManifest,
     technologies,
     stackDetection,
     primaryMigration: stackDetection.migrations.map(m => `${m.source} → ${m.target}`).join(' | ') || 'Source → Target Modernization',
+    architecture: { nodes, edges },
+    dependencyGraph: { nodes, edges },
     health: {
       score: projectRiskScore,
       overall: riskLevel === 'HIGH' ? 'High Technical Debt' : 'Moderate Technical Debt',
@@ -156,7 +207,6 @@ export function analyzeProject(sessionDir, extractedFiles) {
       highRiskFiles,
       potentialBreakingAreas: ['Cross-layer API contracts', 'Global mutable state sync', 'Database schema mapping']
     },
-    dependencyGraph: { nodes, edges },
     behavioralContracts,
     migrationPlan,
     fileContentsMap

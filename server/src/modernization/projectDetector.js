@@ -50,16 +50,16 @@ export function detectProjectStack(fileContentsMap) {
     const fileName = path.basename(relPath).toLowerCase();
 
     // 1. Ruby Detection (Strict evidence: .rb files, Gemfile, Gemfile.lock, #!/usr/bin/env ruby)
-    if (ext === '.rb' || fileName === 'gemfile' || fileName === 'gemfile.lock' || content.includes('#!/usr/bin/env ruby') || (content.includes('require "sinatra"') || content.includes("require 'sinatra'"))) {
+    if (ext === '.rb' || fileName === 'gemfile' || fileName === 'gemfile.lock' || content.includes('#!/usr/bin/env ruby')) {
       recordScore('Ruby', 1.0, `Ruby source file "${relPath}"`, relPath);
-      fileOwnership.set(relPath, 'Ruby');
+      if (ext === '.rb') fileOwnership.set(relPath, 'Ruby');
       continue;
     }
 
     // 2. PHP Detection (Strict evidence: .php files, composer.json, <?php tag)
     if (ext === '.php' || fileName === 'composer.json' || content.includes('<?php')) {
       recordScore('PHP', 1.0, `PHP script "${relPath}"`, relPath);
-      fileOwnership.set(relPath, 'PHP');
+      if (ext === '.php') fileOwnership.set(relPath, 'PHP');
       continue;
     }
 
@@ -67,10 +67,10 @@ export function detectProjectStack(fileContentsMap) {
     if (ext === '.java' || fileName === 'pom.xml' || (fileName === 'build.gradle' && content.includes('com.android.application'))) {
       if (relPath.includes('AndroidManifest.xml') || content.includes('AppCompatActivity') || content.includes('android.app')) {
         recordScore('Android Java', 1.0, `Android Java Activity "${relPath}"`, relPath);
-        fileOwnership.set(relPath, 'Android Java');
+        if (ext === '.java') fileOwnership.set(relPath, 'Android Java');
       } else {
         recordScore('Java', 1.0, `Java source class "${relPath}"`, relPath);
-        fileOwnership.set(relPath, 'Java');
+        if (ext === '.java') fileOwnership.set(relPath, 'Java');
       }
       continue;
     }
@@ -78,49 +78,48 @@ export function detectProjectStack(fileContentsMap) {
     // 4. Python Detection (Strict evidence: .py files, requirements.txt, pyproject.toml, Pipfile)
     if (ext === '.py' || fileName === 'requirements.txt' || fileName === 'pyproject.toml' || fileName === 'pipfile') {
       recordScore('Python', 1.0, `Python module "${relPath}"`, relPath);
-      fileOwnership.set(relPath, 'Python');
+      if (ext === '.py') fileOwnership.set(relPath, 'Python');
       continue;
     }
 
     // 5. Vue Detection (Strict evidence: .vue SFC, <template> + Vue.component)
     if (ext === '.vue' || (content.includes('<template>') && content.includes('</template>')) || content.includes('Vue.component(')) {
       recordScore('Vue.js', 1.0, `Vue SFC component "${relPath}"`, relPath);
-      fileOwnership.set(relPath, 'Vue.js');
+      if (ext === '.vue') fileOwnership.set(relPath, 'Vue.js');
       continue;
     }
 
     // 6. Angular Detection (Strict evidence: angular.json, @Component, @Injectable)
     if (fileName === 'angular.json' || content.includes('@Component({') || content.includes('@Injectable({') || content.includes('ng-app=')) {
       recordScore('Angular', 1.0, `Angular component "${relPath}"`, relPath);
-      fileOwnership.set(relPath, 'Angular');
+      if (ext === '.ts' || ext === '.js') fileOwnership.set(relPath, 'Angular');
       continue;
     }
 
     // 7. Cordova Detection (Strict evidence: config.xml with <widget> & cordova)
     if (fileName === 'config.xml' && content.includes('<widget') && content.includes('cordova')) {
       recordScore('Cordova', 1.0, `Cordova config.xml "${relPath}"`, relPath);
-      fileOwnership.set(relPath, 'Cordova');
       continue;
     }
 
     // 8. SOAP WSDL Detection (Strict evidence: .wsdl or <wsdl:definitions)
     if (ext === '.wsdl' || (content.includes('<wsdl:definitions') || content.includes('<definitions')) && content.includes('soap')) {
       recordScore('SOAP WSDL', 1.0, `SOAP WSDL service contract "${relPath}"`, relPath);
-      fileOwnership.set(relPath, 'SOAP WSDL');
+      if (ext === '.wsdl' || ext === '.xml') fileOwnership.set(relPath, 'SOAP WSDL');
       continue;
     }
 
     // 9. Shell Script Detection (Strict evidence: .sh or #!/bin/bash shebang)
     if (ext === '.sh' || content.startsWith('#!/bin/bash') || content.startsWith('#!/bin/sh')) {
       recordScore('Shell Script', 1.0, `Shell script "${relPath}"`, relPath);
-      fileOwnership.set(relPath, 'Shell Script');
+      if (ext === '.sh') fileOwnership.set(relPath, 'Shell Script');
       continue;
     }
 
     // 10. CloudFormation Detection (Strict evidence: AWSTemplateFormatVersion or AWS:: resource definitions)
     if (content.includes('AWSTemplateFormatVersion') || (content.includes('AWS::') && (content.includes('Type:') || content.includes('Resources:')))) {
       recordScore('CloudFormation', 1.0, `AWS CloudFormation template "${relPath}"`, relPath);
-      fileOwnership.set(relPath, 'CloudFormation');
+      if (ext === '.yaml' || ext === '.yml' || ext === '.json') fileOwnership.set(relPath, 'CloudFormation');
       continue;
     }
 
@@ -128,20 +127,20 @@ export function detectProjectStack(fileContentsMap) {
     if (ext === '.sql' || content.includes('CREATE TABLE')) {
       if (content.includes('INSERT INTO') || content.includes('DROP TABLE IF EXISTS')) {
         recordScore('SQL Dump', 1.0, `SQL Data Dump "${relPath}"`, relPath);
-        fileOwnership.set(relPath, 'SQL Dump');
+        if (ext === '.sql') fileOwnership.set(relPath, 'SQL Dump');
       } else {
         recordScore('MySQL DDL', 1.0, `MySQL Schema DDL "${relPath}"`, relPath);
-        fileOwnership.set(relPath, 'MySQL DDL');
+        if (ext === '.sql') fileOwnership.set(relPath, 'MySQL DDL');
       }
       continue;
     }
 
-    // 12. Frontend jQuery / JavaScript Detection (Strict evidence: .js, .html, .htm with $ or jQuery selectors)
-    if (ext === '.js' || ext === '.html' || ext === '.htm') {
+    // 12. Frontend jQuery / JavaScript Detection (Strict evidence: .js with $ or jQuery selectors)
+    if (ext === '.js') {
       if (content.includes('$') || content.includes('jQuery') || content.includes('$.ajax') || content.includes('.click(')) {
         recordScore('jQuery', 1.0, `jQuery script/DOM selectors in "${relPath}"`, relPath);
         fileOwnership.set(relPath, 'jQuery');
-      } else if (ext === '.js') {
+      } else {
         recordScore('jQuery', 0.8, `Legacy JavaScript file "${relPath}"`, relPath);
         fileOwnership.set(relPath, 'jQuery');
       }
