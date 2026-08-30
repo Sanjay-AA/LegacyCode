@@ -7,6 +7,36 @@ import { runAdapterHealthCheck } from './src/services/adapterHealthChecker.js';
 import { extractProjectZip } from './src/services/zipExtractor.js';
 import { detectSecrets } from './src/services/secretDetector.js';
 
+function runJsonRequest(endpoint, payload = {}) {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(0, async () => {
+      const port = server.address().port;
+      const req = http.request({
+        hostname: 'localhost',
+        port: port,
+        path: endpoint,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      }, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk.toString());
+        res.on('end', () => {
+          server.close(() => {
+            try {
+              resolve({ status: res.statusCode, body: JSON.parse(body) });
+            } catch (e) {
+              resolve({ status: res.statusCode, body });
+            }
+          });
+        });
+      });
+      req.on('error', err => server.close(() => reject(err)));
+      req.write(JSON.stringify(payload));
+      req.end();
+    });
+  });
+}
+
 function runStreamRequest(endpoint, payload) {
   return new Promise((resolve, reject) => {
     const server = app.listen(0, async () => {
@@ -170,6 +200,30 @@ async function runTestSuite() {
     console.log('  ✓ Self-Repair Loop: Triggered Attempt 1, generated fix, and passed post-repair verification!');
   } else {
     console.log('  ✕ Self-Repair Loop: Failed');
+  }
+
+  // 7. Architecture Reconstruction API & Graph Tests
+  console.log('\n[7/7] Testing Architecture Reconstruction API & Graph Analysis...');
+  const resLegacyArch = await runJsonRequest('/api/architecture/analyze');
+  const resModernArch = await runJsonRequest('/api/architecture/analyze-modern');
+  const resCompareArch = await runJsonRequest('/api/architecture/compare');
+
+  if (resLegacyArch.status === 200 && resLegacyArch.body?.architecture?.nodes?.length > 0) {
+    console.log('  ✓ Legacy Architecture Analysis: Returned valid graph structure with', resLegacyArch.body.architecture.nodes.length, 'nodes');
+  } else {
+    console.log('  ✕ Legacy Architecture Analysis: Failed');
+  }
+
+  if (resModernArch.status === 200 && resModernArch.body?.architecture?.nodes?.length > 0) {
+    console.log('  ✓ Modern Architecture Analysis: Returned valid graph structure with', resModernArch.body.architecture.nodes.length, 'nodes');
+  } else {
+    console.log('  ✕ Modern Architecture Analysis: Failed');
+  }
+
+  if (resCompareArch.status === 200 && resCompareArch.body?.comparison?.comparisons?.length > 0) {
+    console.log('  ✓ Architecture Comparison: Generated valid side-by-side mapping matrix!');
+  } else {
+    console.log('  ✕ Architecture Comparison: Failed');
   }
 
   console.log('\n==================================================');

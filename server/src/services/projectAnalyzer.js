@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { detectTechnology } from './technologyDetector.js';
+import { detectProjectStack } from '../modernization/projectDetector.js';
 
 export function analyzeProject(sessionDir, extractedFiles) {
   const inventory = {
@@ -33,11 +33,11 @@ export function analyzeProject(sessionDir, extractedFiles) {
       inventory.htmlFiles.push(file.relativePath);
     } else if (['.css', '.scss', '.less'].includes(ext)) {
       inventory.cssFiles.push(file.relativePath);
-    } else if (['.php', '.java', '.py'].includes(ext)) {
+    } else if (['.rb', '.php', '.java', '.py', '.cs', '.go'].includes(ext) || file.relativePath === 'Gemfile') {
       inventory.backendFiles.push(file.relativePath);
-    } else if (['.sql', '.wsdl', '.json'].includes(ext)) {
+    } else if (['.sql', '.wsdl', '.json', '.prisma'].includes(ext)) {
       inventory.dataFiles.push(file.relativePath);
-    } else if (['.png', '.jpg', '.jpeg', '.svg', '.ico'].includes(ext)) {
+    } else if (['.png', '.jpg', '.jpeg', '.svg', '.ico', '.zip', '.tar', '.gz'].includes(ext)) {
       inventory.assetFiles.push(file.relativePath);
       continue; // Skip reading binary assets
     } else {
@@ -52,20 +52,13 @@ export function analyzeProject(sessionDir, extractedFiles) {
     } catch (_) {}
   }
 
-  // Detect overall project technologies across source files
-  const detectedTechs = new Set();
-  let primaryTech = 'jQuery';
-
-  for (const [relPath, content] of fileContentsMap.entries()) {
-    const det = detectTechnology(content, relPath);
-    if (det.detectedTechnology) {
-      detectedTechs.add(det.detectedTechnology);
-    }
-  }
-
-  const technologies = Array.from(detectedTechs).map(tech => ({
-    name: tech,
-    confidence: 0.95
+  // Detect multi-stack technologies across all project files
+  const stackDetection = detectProjectStack(fileContentsMap);
+  const technologies = stackDetection.technologies.map(t => ({
+    name: `${t.technology} (${t.layer})`,
+    confidence: t.confidence,
+    layer: t.layer,
+    source: t.technology
   }));
 
   // Build Project Dependency Graph
@@ -84,6 +77,11 @@ export function analyzeProject(sessionDir, extractedFiles) {
     edges.push({ from: 'app-root', to: f });
   });
 
+  inventory.backendFiles.forEach(f => {
+    nodes.push({ id: f, label: f, type: 'source' });
+    edges.push({ from: 'app-root', to: f });
+  });
+
   // Calculate Project Health & Risk
   let domMutationsCount = 0;
   let eventHandlersCount = 0;
@@ -94,7 +92,7 @@ export function analyzeProject(sessionDir, extractedFiles) {
     if (content.includes('.click(') || content.includes('.on(')) eventHandlersCount += 2;
     if (content.includes('.html(') || content.includes('.addClass(') || content.includes('.append(')) domMutationsCount += 3;
     if (content.includes('var ') || content.includes('let ')) globalVarsCount += 1;
-    if (content.includes('$.ajax') || content.includes('fetch(')) ajaxCallsCount += 2;
+    if (content.includes('$.ajax') || content.includes('fetch(') || content.includes('http')) ajaxCallsCount += 2;
   }
 
   const rawRiskScore = 100 - Math.min(80, (domMutationsCount * 2 + globalVarsCount + eventHandlersCount + ajaxCallsCount * 3));
@@ -102,46 +100,45 @@ export function analyzeProject(sessionDir, extractedFiles) {
   const riskLevel = projectRiskScore < 50 ? 'HIGH' : projectRiskScore < 80 ? 'MEDIUM' : 'LOW';
 
   const riskFactors = [
-    `Project contains ${inventory.javaScriptFiles.length} JavaScript source file(s) with imperative coupling`,
-    `Detected ${domMutationsCount} direct DOM mutations bypassing virtual DOM`,
-    `Detected ${globalVarsCount} mutable scope variables across modules`,
-    `Detected ${ajaxCallsCount} asynchronous HTTP API interactions`
+    `Project contains ${inventory.totalFiles} file(s) across ${technologies.length || 1} detected layer(s)`,
+    `Imperative coupling and unencapsulated side effects in legacy modules`,
+    `Asynchronous cross-layer API & service interactions`
   ];
 
   // Impact Analysis
-  const affectedFiles = [...inventory.javaScriptFiles, ...inventory.htmlFiles];
-  const highRiskFiles = inventory.javaScriptFiles.filter(f => {
+  const affectedFiles = [...inventory.javaScriptFiles, ...inventory.backendFiles, ...inventory.htmlFiles];
+  const highRiskFiles = [...inventory.javaScriptFiles, ...inventory.backendFiles].filter(f => {
     const c = fileContentsMap.get(f) || '';
-    return c.includes('$.ajax') || c.includes('.click(') || c.includes('localStorage');
+    return c.includes('$.ajax') || c.includes('.click(') || c.includes('localStorage') || c.includes('require');
   });
 
   // Project Behavioral Contracts
   const behavioralContracts = [
     {
-      module: 'Core User Interactions',
+      module: 'Multi-Stack Integration Contracts',
       behaviors: [
-        { action: 'Click action handlers', expected: 'Triggers state update and re-renders UI' },
-        { action: 'Form submissions', expected: 'Validates input and dispatches async API request' },
-        { action: 'Local storage persistence', expected: 'Restores cached session data on mount' }
+        { action: 'Frontend & API Interaction', expected: 'Triggers state update and dispatches REST requests' },
+        { action: 'Backend & Service Logic', expected: 'Processes payload, validates params, and returns JSON' },
+        { action: 'Database & Schema Persistence', expected: 'Ensures relational data model integrity' }
       ]
     }
   ];
 
-  // Project Migration Plan & Topological Order
+  // Project Migration Plan & Topological Order across detected layers
   const migrationPlan = {
-    phases: [
-      { phase: 1, title: 'Initialize React 18 Application Structure & Vite Setup', files: ['package.json'] },
-      { phase: 2, title: 'Convert Shared State Hooks & Utility Helpers', files: inventory.javaScriptFiles.slice(0, 1) },
-      { phase: 3, title: 'Migrate Interactive UI Modules to React Components', files: inventory.javaScriptFiles },
-      { phase: 4, title: 'Migrate HTML Templates & Layout Shells', files: inventory.htmlFiles },
-      { phase: 5, title: 'Execute Behavioral Verification Suite across Component Tree', files: affectedFiles }
-    ]
+    phases: stackDetection.migrations.map((m, idx) => ({
+      phase: idx + 1,
+      title: `Migrate ${m.layer.toUpperCase()} Layer: ${m.source} → ${m.target}`,
+      description: `Transform ${m.layer} legacy modules to modern ${m.target} structure`,
+      files: Object.entries(stackDetection.fileOwnership).filter(([_, info]) => info.adapterId === m.adapterId).map(([p]) => p)
+    }))
   };
 
   return {
     inventory,
-    technologies: technologies.length > 0 ? technologies : [{ name: 'jQuery', confidence: 0.95 }],
-    primaryMigration: 'jQuery → React',
+    technologies,
+    stackDetection,
+    primaryMigration: stackDetection.migrations.map(m => `${m.source} → ${m.target}`).join(' | ') || 'Source → Target Modernization',
     health: {
       score: projectRiskScore,
       overall: riskLevel === 'HIGH' ? 'High Technical Debt' : 'Moderate Technical Debt',
@@ -157,7 +154,7 @@ export function analyzeProject(sessionDir, extractedFiles) {
       affectedFilesCount: affectedFiles.length,
       affectedFiles,
       highRiskFiles,
-      potentialBreakingAreas: ['Imperative DOM event listeners', 'Global mutable state sync', 'LocalStorage cache restoration']
+      potentialBreakingAreas: ['Cross-layer API contracts', 'Global mutable state sync', 'Database schema mapping']
     },
     dependencyGraph: { nodes, edges },
     behavioralContracts,

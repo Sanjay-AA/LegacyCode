@@ -1,3 +1,5 @@
+import { calculateLegacySafetyScore, calculateModernSafetyScore } from '../scoring/migrationSafety.js';
+
 /**
  * Base Migration Adapter Class
  * Defines the standard contract for all technology migration adapters.
@@ -34,13 +36,14 @@ export class BaseAdapter {
   }
 
   getRiskAssessment(analysis, migratedCode) {
-    const beforeScore = analysis.health?.score || 50;
-    const afterScore = Math.min(95, beforeScore + 40);
+    const legacy = calculateLegacySafetyScore(analysis);
+    const modern = calculateModernSafetyScore({ analysis, migratedCode });
     return {
-      beforeScore,
-      afterScore,
-      beforeLevel: analysis.health?.riskLevel || 'HIGH',
-      afterLevel: 'LOW',
+      beforeScore: legacy.totalScore,
+      afterScore: modern.totalScore,
+      beforeLevel: legacy.riskLevel,
+      afterLevel: modern.riskLevel,
+      breakdown: modern.breakdown,
       reasons: (analysis.risks || []).map(r => r.title)
     };
   }

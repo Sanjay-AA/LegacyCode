@@ -7,6 +7,7 @@ import verifyRouter from './verify.js';
 import shipRouter from './ship.js';
 import pipelineRouter from './pipeline.js';
 import workspaceRouter from './workspace.js';
+import architectureRouter from './architecture.js';
 
 const router = Router();
 
@@ -18,5 +19,6 @@ router.use('/verify', verifyRouter);
 router.use('/ship', shipRouter);
 router.use('/pipeline', pipelineRouter);
 router.use('/workspace', workspaceRouter);
+router.use('/architecture', architectureRouter);
 
 export default router;

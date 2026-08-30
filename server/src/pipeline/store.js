@@ -1,6 +1,8 @@
+import path from 'path';
+
 /**
  * In-memory session store for Legacy Rescue agent state with stage checkpoints
- * and shipping idempotency protection.
+ * and dual workspace support (legacyWorkspace vs. modernWorkspace).
  */
 
 class SessionStore {
@@ -8,6 +10,8 @@ class SessionStore {
     this.checkpoints = new Map();
     this.session = {
       id: null,
+      legacyWorkspace: null,
+      modernWorkspace: null,
       workspaceDir: null,
       workspaceBaseline: null,
       filename: null,
@@ -23,11 +27,27 @@ class SessionStore {
     };
   }
 
-  setWorkspace(sessionId, workspaceDir, baseline = null) {
+  setWorkspace(sessionId, legacyWorkspace, modernWorkspace = null, baseline = null) {
+    let legPath = legacyWorkspace;
+    let modPath = modernWorkspace;
+
+    // Handle backward compatibility signature (sessionId, workspaceDir, baseline)
+    if (typeof legacyWorkspace === 'string' && !modernWorkspace && baseline === null) {
+      if (legacyWorkspace.endsWith('legacy') || legacyWorkspace.endsWith('modern')) {
+        legPath = legacyWorkspace.replace(/[/\\]modern$/, '').replace(/[/\\]legacy$/, '') + '/legacy';
+        modPath = legacyWorkspace.replace(/[/\\]modern$/, '').replace(/[/\\]legacy$/, '') + '/modern';
+      } else {
+        legPath = path.join(legacyWorkspace, 'legacy');
+        modPath = path.join(legacyWorkspace, 'modern');
+      }
+    }
+
     this.session = {
       ...this.session,
       id: sessionId,
-      workspaceDir,
+      legacyWorkspace: legPath,
+      modernWorkspace: modPath,
+      workspaceDir: modPath || legPath,
       workspaceBaseline: baseline,
       updatedAt: new Date().toISOString()
     };
@@ -111,6 +131,8 @@ class SessionStore {
     this.checkpoints.clear();
     this.session = {
       id: null,
+      legacyWorkspace: null,
+      modernWorkspace: null,
       workspaceDir: null,
       workspaceBaseline: null,
       filename: null,

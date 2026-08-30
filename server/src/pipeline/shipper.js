@@ -2,6 +2,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
+import { calculateLegacySafetyScore, calculateModernSafetyScore } from '../scoring/migrationSafety.js';
 
 const execAsync = promisify(exec);
 
@@ -86,8 +87,8 @@ export async function shipMigration(session) {
     const repoOwner = process.env.GITHUB_REPOSITORY_OWNER || 'Sanjay-AA';
     const repoName = process.env.GITHUB_REPOSITORY_NAME || 'LegacyCode';
 
-    const beforeRiskLevel = analysis.health?.riskLevel || 'HIGH';
-    const beforeRiskScore = analysis.health?.score || 42;
+    const legacySafety = calculateLegacySafetyScore(analysis);
+    const modernSafety = calculateModernSafetyScore({ analysis, verificationResult, migratedCode });
 
     const prTitle = `Modernize ${filename}`;
     const prBody = `# Modernize ${filename}
@@ -107,9 +108,9 @@ jQuery → React
 ## Verification
 ${verificationResult.metrics?.passedTests || 0}/${verificationResult.metrics?.totalTests || 0} behavioral tests passed (100% verified)
 
-## Risk
-Before: ${beforeRiskLevel} (${beforeRiskScore}/100)
-After: LOW (92/100)
+## Migration Safety Score
+Before: ${legacySafety.riskLevel} (${legacySafety.totalScore}/100)
+After: ${modernSafety.riskLevel} (${modernSafety.totalScore}/100)
 
 ## Review Areas
 - Synthetic event dispatching

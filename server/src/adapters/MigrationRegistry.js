@@ -4,6 +4,7 @@ import { AngularToReactAdapter } from './web/angularToReactAdapter.js';
 import { PhpToLaravelAdapter } from './backend/phpToLaravelAdapter.js';
 import { JavaToSpringAdapter } from './backend/javaToSpringAdapter.js';
 import { PythonToFastApiAdapter } from './backend/pythonToFastApiAdapter.js';
+import { RubyToRailsAdapter } from './backend/rubyToRailsAdapter.js';
 import { AndroidJavaToKotlinAdapter } from './mobile/androidJavaToKotlinAdapter.js';
 import { ReactNativeModernizationAdapter } from './mobile/reactNativeModernizationAdapter.js';
 import { LegacyMobileAdapter } from './mobile/legacyMobileAdapter.js';
@@ -33,6 +34,7 @@ class MigrationRegistryService {
     this.register(new PhpToLaravelAdapter());
     this.register(new JavaToSpringAdapter());
     this.register(new PythonToFastApiAdapter());
+    this.register(new RubyToRailsAdapter());
 
     // Mobile Adapters
     this.register(new AndroidJavaToKotlinAdapter());

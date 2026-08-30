@@ -106,9 +106,9 @@ router.post('/run-project', async (req, res) => {
 
     const buffer = Buffer.from(projectZipBase64, 'base64');
     const extraction = extractProjectZip(buffer, filename);
-    const baseline = createWorkspaceBaseline(extraction.sessionDir);
-    activeStore.setWorkspace(extraction.sessionId, extraction.sessionDir, baseline);
-    const projectAnalysis = analyzeProject(extraction.sessionDir, extraction.extractedFiles);
+    const baseline = createWorkspaceBaseline(extraction.legacyDir);
+    activeStore.setWorkspace(extraction.sessionId, extraction.legacyDir, extraction.modernDir, baseline);
+    const projectAnalysis = analyzeProject(extraction.legacyDir, extraction.extractedFiles);
 
     // Secret Detection Guard
     const secretsResult = detectSecrets(projectAnalysis.fileContentsMap, extraction.extractedFiles);
@@ -154,8 +154,8 @@ router.post('/run-project', async (req, res) => {
     await delay(600);
 
     let projectMigrationResult = migrateProject(extraction.sessionDir, projectAnalysis, adapterId, simulateFailure ? 'Simulate Disparity' : null);
-    const updatedBaseline = createWorkspaceBaseline(extraction.sessionDir);
-    activeStore.setWorkspace(extraction.sessionId, extraction.sessionDir, updatedBaseline);
+    const updatedBaseline = createWorkspaceBaseline(extraction.modernDir);
+    activeStore.setWorkspace(extraction.sessionId, extraction.legacyDir, extraction.modernDir, updatedBaseline);
     activeStore.setMigration(projectMigrationResult.mainAppCode, projectMigrationResult.projectDiff);
 
     emitEvent('migrate:complete', {

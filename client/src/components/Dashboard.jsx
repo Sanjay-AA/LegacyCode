@@ -14,7 +14,9 @@ import MigrationHistory from './MigrationHistory';
 import AdapterDashboard from './AdapterDashboard';
 import VerifyViewer from './VerifyViewer';
 import PlanViewer from './PlanViewer';
+import ArchitectureView from './architecture/ArchitectureView';
 import { runPipelineStream, runProjectPipelineStream, shipMigrationApi, fetchAdaptersApi, openVSCodeApi, fetchWorkspaceStatusApi } from '../services/api';
+import { calculateLegacySafetyScore, calculateModernSafetyScore } from '../services/migrationSafety';
 import {
   RefreshCw, RotateCcw, XCircle, CheckCircle2, ExternalLink, GitPullRequest,
   Code, Activity, ShieldAlert, FileText, Lightbulb, Network, History, Award, Layers, Map, ShieldCheck, Send, Sparkles, FolderOpen, AlertCircle
@@ -454,8 +456,11 @@ export default function Dashboard() {
   };
 
   const componentName = session.plan?.componentName || 'MigratedComponent';
-  const beforeScore = session.analysis?.health?.score || 42;
-  const afterScore = 92;
+  const legacySafety = calculateLegacySafetyScore(session.analysis);
+  const modernSafety = calculateModernSafetyScore(session);
+
+  const beforeScore = legacySafety.totalScore;
+  const afterScore = modernSafety.totalScore;
 
   const activeAdapterSource = session.selectedAdapter?.source || session.analysis?.technology || 'jQuery';
   const activeAdapterTarget = session.selectedAdapter?.target || session.analysis?.target || 'React';
@@ -590,6 +595,23 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {/* DETECTED PROJECT STACK BANNER */}
+            {session.analysis?.stackDetection?.migrations && (
+              <div className="bg-[#0c1219] border border-[#1c2e38] rounded-2xl p-4 space-y-2 font-mono text-xs shadow-xl">
+                <span className="font-extrabold text-slate-300 uppercase tracking-wider text-[11px] block border-b border-[#1c2e38] pb-1.5">
+                  DETECTED PROJECT STACK & PLANNED MIGRATIONS
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                  {session.analysis.stackDetection.migrations.map((m, idx) => (
+                    <div key={idx} className="bg-[#070a0e] p-2.5 rounded-xl border border-[#1c2e38] flex items-center justify-between">
+                      <span className="text-slate-400 capitalize">{m.layer}: <strong className="text-white">{m.source}</strong></span>
+                      <span className="text-[#10b981] font-bold">→ {m.target}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* HUMAN APPROVAL GATE BANNER */}
             {session.readyForReview && !session.shipResult && (
               <div className="bg-[#0c1219] border-2 border-[#10b981] rounded-2xl p-6 shadow-2xl space-y-4">
@@ -681,7 +703,7 @@ export default function Dashboard() {
                   </div>
                   <div className="bg-[#070a0e] border border-[#1c2e38] p-3 rounded-xl flex items-center space-x-2 text-purple-300">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    <span>Migration Risk: {beforeScore} → {afterScore} (LOW)</span>
+                    <span>Migration Safety: {beforeScore} → {afterScore} ({modernSafety.riskLevel})</span>
                   </div>
                   <div className="bg-[#070a0e] border border-[#1c2e38] p-3 rounded-xl flex items-center space-x-2 text-sky-300">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -779,6 +801,17 @@ export default function Dashboard() {
               </button>
 
               <button
+                onClick={() => setActiveTab('architecture')}
+                disabled={!session.rawCode}
+                className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors disabled:opacity-40 ${
+                  activeTab === 'architecture' ? 'bg-[#1c2e38] text-[#10b981]' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Architecture</span>
+              </button>
+
+              <button
                 onClick={() => setActiveTab('health')}
                 disabled={!session.analysis}
                 className={`px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors disabled:opacity-40 ${
@@ -797,7 +830,7 @@ export default function Dashboard() {
                 }`}
               >
                 <ShieldAlert className="w-3.5 h-3.5" />
-                <span>Migration Risk</span>
+                <span>Migration Safety</span>
               </button>
 
               <button
@@ -892,6 +925,8 @@ export default function Dashboard() {
               </div>
             ) : activeTab === 'plan' ? (
               <PlanViewer plan={session.plan} />
+            ) : activeTab === 'architecture' ? (
+              <ArchitectureView session={session} />
             ) : activeTab === 'adapters' ? (
               <AdapterDashboard />
             ) : activeTab === 'health' ? (
@@ -903,10 +938,11 @@ export default function Dashboard() {
               />
             ) : activeTab === 'risk' ? (
               <RiskAssessment
-                beforeScore={beforeScore}
-                afterScore={afterScore}
-                beforeLevel={session.analysis?.health?.riskLevel || 'HIGH'}
-                afterLevel="LOW"
+                beforeScore={legacySafety.totalScore}
+                afterScore={modernSafety.totalScore}
+                beforeLevel={legacySafety.riskLevel}
+                afterLevel={modernSafety.riskLevel}
+                breakdown={modernSafety.breakdown}
                 reasons={session.analysis?.risks?.map(r => r.title) || []}
               />
             ) : activeTab === 'graph' ? (

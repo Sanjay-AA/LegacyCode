@@ -4,15 +4,23 @@ import os from 'os';
 import crypto from 'crypto';
 import AdmZip from 'adm-zip';
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
-const MAX_DIRECTORY_DEPTH = 10;
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB single file
+const MAX_TOTAL_SIZE = 150 * 1024 * 1024; // 150MB total archive limit
+const MAX_DIRECTORY_DEPTH = 15;
+
+const IGNORED_PATHS = [
+  'node_modules', '.git', 'build', 'dist', 'coverage', '.next', '.cache',
+  'temp', 'tmp', '.vscode', '.idea', 'vendor', '__pycache__', '.pytest_cache'
+];
 
 export function extractProjectZip(buffer, originalFilename = 'project.zip') {
   const sessionId = crypto.randomBytes(8).toString('hex');
   const sessionDir = path.join(os.tmpdir(), 'latentcode', 'sessions', sessionId);
+  const legacyDir = path.join(sessionDir, 'legacy');
+  const modernDir = path.join(sessionDir, 'modern');
 
-  fs.mkdirSync(sessionDir, { recursive: true });
+  fs.mkdirSync(legacyDir, { recursive: true });
+  fs.mkdirSync(modernDir, { recursive: true });
 
   const zip = new AdmZip(buffer);
   const zipEntries = zip.getEntries();
@@ -25,6 +33,11 @@ export function extractProjectZip(buffer, originalFilename = 'project.zip') {
 
     const rawName = entry.entryName || '';
     const entryName = rawName.replace(/\\/g, '/');
+
+    // Skip ignored directory paths (e.g., node_modules, .git, etc.)
+    if (IGNORED_PATHS.some(p => entryName.includes(`/${p}/`) || entryName.startsWith(`${p}/`))) {
+      continue;
+    }
 
     // 1. Path Traversal & Absolute Path Protection
     if (
@@ -51,21 +64,21 @@ export function extractProjectZip(buffer, originalFilename = 'project.zip') {
     // 4. File Size Limit & Zip Bomb Prevention
     const uncompressedSize = entry.header.size || entry.getData().length;
     if (uncompressedSize > MAX_FILE_SIZE) {
-      throw new Error(`Security Violation: File "${entryName}" exceeds maximum size limit (10MB)`);
+      continue; // Safely skip single oversized binary files without breaking analysis
     }
 
     totalExtractedBytes += uncompressedSize;
     if (totalExtractedBytes > MAX_TOTAL_SIZE) {
-      throw new Error(`Security Violation: Total extracted archive size exceeds 50MB limit`);
+      throw new Error(`Security Violation: Total extracted archive size exceeds ${MAX_TOTAL_SIZE / (1024 * 1024)}MB limit`);
     }
 
-    // Safe Target Destination
-    const targetPath = path.join(sessionDir, entryName);
+    // Safe Target Destination inside legacyDir
+    const targetPath = path.join(legacyDir, entryName);
     const targetDir = path.dirname(targetPath);
 
-    // Double-check resolved path stays inside sessionDir
-    if (!targetPath.startsWith(sessionDir)) {
-      throw new Error(`Security Violation: Target path "${targetPath}" escapes session directory`);
+    // Double-check resolved path stays inside legacyDir
+    if (!targetPath.startsWith(legacyDir)) {
+      throw new Error(`Security Violation: Target path "${targetPath}" escapes legacy directory`);
     }
 
     fs.mkdirSync(targetDir, { recursive: true });
@@ -81,6 +94,8 @@ export function extractProjectZip(buffer, originalFilename = 'project.zip') {
   return {
     sessionId,
     sessionDir,
+    legacyDir,
+    modernDir,
     totalFiles: extractedFiles.length,
     totalSizeBytes: totalExtractedBytes,
     extractedFiles

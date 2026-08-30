@@ -191,6 +191,7 @@ export default function CodeUploader({
             <option value="php-to-laravel">PHP → Laravel</option>
             <option value="java-to-spring">Java → Spring Boot</option>
             <option value="python-to-fastapi">Python → FastAPI</option>
+            <option value="ruby-to-rails">Ruby → Rails</option>
           </optgroup>
           <optgroup label="Mobile Stack">
             <option value="android-java-to-kotlin">Android Java → Kotlin</option>

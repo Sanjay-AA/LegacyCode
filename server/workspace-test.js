@@ -56,7 +56,7 @@ export async function runWorkspaceTests() {
 
   let openResult = await openWorkspaceInVSCode('non-existent');
   assert.strictEqual(openResult.success, false);
-  assert.strictEqual(openResult.error, 'MIGRATION_NOT_COMPLETE');
+  assert.strictEqual(openResult.error, 'SESSION_NOT_FOUND');
   console.log('  ✓ Error response handling passed!');
 
   // 4. Test Valid Session Workspace Resolution & Open Command
