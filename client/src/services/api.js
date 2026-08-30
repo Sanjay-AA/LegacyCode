@@ -45,14 +45,14 @@ export async function detectTechnologyApi(code, filename) {
   return await response.json();
 }
 
-export async function openVSCodeApi(sessionId) {
+export async function openVSCodeApi(sessionId, sessionData = null) {
   const response = await fetch(`${API_BASE_URL}/workspace/open-vscode`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json'
     },
-    body: JSON.stringify({ sessionId })
+    body: JSON.stringify({ sessionId, sessionData })
   });
 
   const data = await response.json();
@@ -207,55 +207,4 @@ export async function runProjectPipelineStream({ projectZipBase64, filename, ada
   } catch (err) {
     if (onError) onError(err);
   }
-}
-
-export async function fetchLegacyArchitectureApi(sessionId) {
-  const response = await fetch(`${API_BASE_URL}/architecture/analyze`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    },
-    body: JSON.stringify({ sessionId })
-  });
-
-  const data = await response.json();
-  if (!response.ok || !data.success) {
-    throw new Error(data.message || 'Failed to fetch legacy architecture');
-  }
-  return data;
-}
-
-export async function fetchModernArchitectureApi(sessionId) {
-  const response = await fetch(`${API_BASE_URL}/architecture/analyze-modern`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    },
-    body: JSON.stringify({ sessionId })
-  });
-
-  const data = await response.json();
-  if (!response.ok || !data.success) {
-    throw new Error(data.message || 'Failed to fetch modern architecture');
-  }
-  return data;
-}
-
-export async function fetchArchitectureComparisonApi(sessionId) {
-  const response = await fetch(`${API_BASE_URL}/architecture/compare`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    },
-    body: JSON.stringify({ sessionId })
-  });
-
-  const data = await response.json();
-  if (!response.ok || !data.success) {
-    throw new Error(data.message || 'Failed to fetch architecture comparison');
-  }
-  return data;
 }

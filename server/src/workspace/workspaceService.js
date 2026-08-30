@@ -28,7 +28,19 @@ export function ensureWorkspaceForSession() {
   }
 
   // 2. Ensure Modern Workspace contains generated modernized code if completed
-  if (session.migratedCode) {
+  if (session.projectDiff && Array.isArray(session.projectDiff) && session.projectDiff.length > 0) {
+    // Multi-file project diff writing
+    session.projectDiff.forEach(fileItem => {
+      const relPath = fileItem.filename || fileItem.path || fileItem.name;
+      const content = fileItem.content || fileItem.code || fileItem.migratedContent;
+      if (relPath && content) {
+        const fullPath = path.join(modernDir, relPath);
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, content);
+      }
+    });
+  } else if (session.migratedCode) {
+    // Single-file modernized component writing
     const filename = session.filename || 'MigratedComponent.jsx';
     const compName = path.basename(filename, path.extname(filename));
     const srcDir = path.join(modernDir, 'src', 'components');
@@ -78,8 +90,29 @@ export default function App() {
  * Resolves the target workspace for VS Code launch.
  * MUST open modernWorkspace when migration is complete.
  */
-export async function openWorkspaceInVSCode(sessionIdReq) {
-  const session = activeStore.getSession();
+export async function openWorkspaceInVSCode(sessionIdReq, sessionDataReq = null) {
+  // If sessionDataReq is provided (from restored browser state or history item), sync activeStore
+  if (sessionDataReq && sessionDataReq.migratedCode) {
+    const targetSessionId = sessionDataReq.id || sessionIdReq || `session-${Date.now()}`;
+    const sessionDir = path.join(os.tmpdir(), 'latentcode', 'sessions', targetSessionId);
+    const legacyWorkspace = sessionDataReq.legacyWorkspace || path.join(sessionDir, 'legacy');
+    const modernWorkspace = sessionDataReq.modernWorkspace || path.join(sessionDir, 'modern');
+
+    activeStore.setWorkspace(targetSessionId, legacyWorkspace, modernWorkspace);
+    activeStore.setAnalysis(
+      sessionDataReq.filename || 'legacy-code.js',
+      sessionDataReq.rawCode || '',
+      sessionDataReq.analysis || {}
+    );
+    if (sessionDataReq.plan) activeStore.setPlan(sessionDataReq.plan);
+    activeStore.setMigration(
+      sessionDataReq.migratedCode,
+      sessionDataReq.projectDiff || sessionDataReq.migrationSummary
+    );
+    if (sessionDataReq.verification) activeStore.setVerification(sessionDataReq.verification);
+  }
+
+  let session = activeStore.getSession();
 
   // 1. Session Existence Check
   if (!session || (!session.id && !session.rawCode && !session.workspaceDir)) {
@@ -91,8 +124,8 @@ export async function openWorkspaceInVSCode(sessionIdReq) {
     };
   }
 
-  // 2. Validate session ID if provided
-  if (sessionIdReq && session.id && sessionIdReq !== session.id) {
+  // 2. Validate session ID if provided (allow matching if restored)
+  if (sessionIdReq && session.id && sessionIdReq !== session.id && !sessionDataReq) {
     return {
       success: false,
       statusCode: 403,
@@ -102,19 +135,19 @@ export async function openWorkspaceInVSCode(sessionIdReq) {
   }
 
   // 3. Check migration completion
-  const isMigrationComplete = Boolean(session.migratedCode || session.verificationResult);
+  const isMigrationComplete = Boolean(session.migratedCode || session.verificationResult || session.projectDiff);
 
   if (!isMigrationComplete) {
     return {
       success: false,
       statusCode: 400,
       error: 'MIGRATION_NOT_COMPLETE',
-      message: 'Modernized workspace is not available.'
+      message: 'Modernized workspace is not available. Please run the migration first.'
     };
   }
 
-  // Ensure modern workspace exists on disk
-  const modernWorkspace = session.modernWorkspace || (session.workspaceDir && fs.existsSync(path.join(session.workspaceDir, 'modern')) ? path.join(session.workspaceDir, 'modern') : null) || ensureWorkspaceForSession();
+  // Ensure modern workspace exists on disk with generated files
+  const modernWorkspace = ensureWorkspaceForSession();
 
   // 4. Validate modern workspace directory existence
   if (!modernWorkspace || !fs.existsSync(modernWorkspace) || !fs.statSync(modernWorkspace).isDirectory()) {
@@ -122,7 +155,7 @@ export async function openWorkspaceInVSCode(sessionIdReq) {
       success: false,
       statusCode: 404,
       error: 'MODERN_WORKSPACE_NOT_FOUND',
-      message: 'Modernized workspace is not available.'
+      message: 'Modernized workspace is unavailable. Please run the migration again.'
     };
   }
 
@@ -137,7 +170,7 @@ export async function openWorkspaceInVSCode(sessionIdReq) {
       success: false,
       statusCode: 404,
       error: 'MODERN_WORKSPACE_EMPTY',
-      message: 'Modernized workspace is not available.'
+      message: 'Modernized workspace is unavailable. Please run the migration again.'
     };
   }
 

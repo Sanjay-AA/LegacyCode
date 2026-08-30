@@ -8,8 +8,8 @@ const router = Router();
  * Opens the current migration workspace in local VS Code.
  */
 router.post('/open-vscode', async (req, res) => {
-  const { sessionId } = req.body || {};
-  const result = await openWorkspaceInVSCode(sessionId);
+  const { sessionId, sessionData } = req.body || {};
+  const result = await openWorkspaceInVSCode(sessionId, sessionData);
   if (!result.success) {
     return res.status(result.statusCode || 400).json({
       success: false,

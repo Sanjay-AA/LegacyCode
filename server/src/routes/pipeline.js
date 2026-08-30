@@ -204,13 +204,35 @@ router.post('/run-project', async (req, res) => {
       message: `Project Verification: ${verification.metrics.passedTests}/${verification.metrics.totalTests} tests passed`
     });
 
+    const detectedSources = (projectAnalysis.technologies || []).map(t => t.name).join(' + ') || 'Legacy Project';
+    const detectedTargets = (projectAnalysis.stackDetection?.migrations || []).map(m => m.target).join(' + ') || 'React Application';
+
     historyStore.addMigration({
-      source: 'Legacy Project',
-      target: 'React Application',
+      id: extraction.sessionId,
+      source: detectedSources,
+      target: detectedTargets,
       filename,
       adapterId,
       status: 'AWAITING_APPROVAL',
-      verifiedTests: `${verification.metrics.passedTests}/${verification.metrics.totalTests}`
+      verifiedTests: `${verification.metrics.passedTests}/${verification.metrics.totalTests}`,
+      sessionData: {
+        id: extraction.sessionId,
+        filename,
+        rawCode: `/* Project Archive: ${filename} */`,
+        isProject: true,
+        adapterId,
+        detection: projectAnalysis.technologies,
+        analysis: projectAnalysis,
+        plan: projectAnalysis.migrationPlan,
+        migratedCode: projectMigrationResult.mainAppCode,
+        projectDiff: projectMigrationResult.projectDiff,
+        explanations: projectMigrationResult.explanations,
+        verification,
+        repairAttempts,
+        readyForReview: true,
+        currentStage: 'completed',
+        stageStatus: 'success'
+      }
     });
 
     res.end();
@@ -430,13 +452,30 @@ router.post('/run', async (req, res) => {
     });
 
     historyStore.addMigration({
+      id: activeStore.getSession()?.id || `session-${Date.now()}`,
       source: adapter.source,
       target: adapter.target,
       filename: sessionFilename,
       adapterId: adapter.id,
       status: 'AWAITING_APPROVAL',
       verifiedTests: `${passCount}/${totalCount}`,
-      riskReduction: `${analysis.health?.score || 40} → 92`
+      riskReduction: `${analysis.health?.score || 40} → 92`,
+      sessionData: {
+        id: activeStore.getSession()?.id || `session-${Date.now()}`,
+        filename: sessionFilename,
+        rawCode: sessionCode,
+        isProject: false,
+        adapterId: adapter.id,
+        analysis,
+        plan,
+        migratedCode: migrationResult.migratedCode,
+        explanations: migrationResult.explanations,
+        verification,
+        repairAttempts,
+        readyForReview: true,
+        currentStage: 'completed',
+        stageStatus: 'success'
+      }
     });
 
     emitEvent('trace:log', { message: 'Awaiting human approval before shipping...' });

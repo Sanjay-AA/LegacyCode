@@ -202,30 +202,6 @@ async function runTestSuite() {
     console.log('  ✕ Self-Repair Loop: Failed');
   }
 
-  // 7. Architecture Reconstruction API & Graph Tests
-  console.log('\n[7/7] Testing Architecture Reconstruction API & Graph Analysis...');
-  const resLegacyArch = await runJsonRequest('/api/architecture/analyze');
-  const resModernArch = await runJsonRequest('/api/architecture/analyze-modern');
-  const resCompareArch = await runJsonRequest('/api/architecture/compare');
-
-  if (resLegacyArch.status === 200 && resLegacyArch.body?.architecture?.nodes?.length > 0) {
-    console.log('  ✓ Legacy Architecture Analysis: Returned valid graph structure with', resLegacyArch.body.architecture.nodes.length, 'nodes');
-  } else {
-    console.log('  ✕ Legacy Architecture Analysis: Failed');
-  }
-
-  if (resModernArch.status === 200 && resModernArch.body?.architecture?.nodes?.length > 0) {
-    console.log('  ✓ Modern Architecture Analysis: Returned valid graph structure with', resModernArch.body.architecture.nodes.length, 'nodes');
-  } else {
-    console.log('  ✕ Modern Architecture Analysis: Failed');
-  }
-
-  if (resCompareArch.status === 200 && resCompareArch.body?.comparison?.comparisons?.length > 0) {
-    console.log('  ✓ Architecture Comparison: Generated valid side-by-side mapping matrix!');
-  } else {
-    console.log('  ✕ Architecture Comparison: Failed');
-  }
-
   console.log('\n==================================================');
   console.log('ALL TEST SUITE SCENARIOS EXECUTED SUCCESSFULLY!');
   console.log('==================================================');

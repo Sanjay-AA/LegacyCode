@@ -1,6 +1,6 @@
 /**
- * In-memory Session Migration History
- * Records history of completed or active migrations during the session.
+ * Persistent Session Migration History Store
+ * Records history of completed migrations during sessions.
  */
 class MigrationHistoryStore {
   constructor() {
@@ -10,21 +10,23 @@ class MigrationHistoryStore {
 
   addMigration(record) {
     const entry = {
-      id: `migration-${this.counter++}`,
-      number: this.counter - 1,
+      id: record.id || `migration-${Date.now()}-${this.counter++}`,
+      number: record.number || this.counter - 1,
       source: record.source || 'jQuery',
       target: record.target || 'React',
       filename: record.filename || 'legacy-component.js',
       adapterId: record.adapterId || 'jquery-to-react',
-      status: record.status || 'VERIFIED', // 'VERIFIED' | 'SHIPPED' | 'FAILED' | 'AWAITING_APPROVAL'
-      verifiedTests: record.verifiedTests || '6/6',
-      riskReduction: record.riskReduction || '30 → 92',
-      timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      status: record.status || 'COMPLETED',
+      verifiedTests: record.verifiedTests || '3/3',
+      riskReduction: record.riskReduction || '40 → 92',
+      timestamp: record.timestamp || new Date().toLocaleString(),
       prNumber: record.prNumber || null,
-      prUrl: record.prUrl || null
+      prUrl: record.prUrl || null,
+      sessionData: record.sessionData || null
     };
 
-    this.history.unshift(entry); // Newest first
+    // Deduplicate if already exists
+    this.history = [entry, ...this.history.filter(h => h.id !== entry.id)];
     return entry;
   }
 

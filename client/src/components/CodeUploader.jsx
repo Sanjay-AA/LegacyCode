@@ -1,21 +1,10 @@
-import React, { useState, useRef } from 'react';
-import { Upload, FileCode, FolderArchive, AlertCircle, ArrowRight, Layers, Code, Sparkles, Server, Cpu } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Upload, FolderArchive, Code2, Sparkles, Trash2, ArrowRight, AlertTriangle } from 'lucide-react';
+import { validateCodeInput } from '../services/inputValidator';
 
 const SAMPLE_JQUERY_CODE = `// Legacy User Signup & Preferences jQuery Component
 $(document).ready(function() {
   var isSubmitting = false;
-  var userSessionKey = 'user_pref_v1';
-
-  var savedTheme = localStorage.getItem('theme_mode');
-  if (savedTheme) {
-    $('#theme-select').val(savedTheme);
-    $('body').addClass('theme-' + savedTheme);
-  }
-
-  $('#open-signup-modal').on('click', function(e) {
-    e.preventDefault();
-    $('#signup-modal').fadeIn(200).addClass('active');
-  });
 
   $('#signup-form').submit(function(e) {
     e.preventDefault();
@@ -71,6 +60,28 @@ public class UserServlet extends HttpServlet {
     }
 }`;
 
+function detectLanguageLocal(code, filename) {
+  const ext = (filename || '').split('.').pop().toLowerCase();
+  if (ext === 'php') return { source: 'PHP', target: 'Laravel', adapterId: 'php-to-laravel', langBadge: 'PHP' };
+  if (ext === 'java') return { source: 'Java', target: 'Spring Boot', adapterId: 'java-to-spring', langBadge: 'JAVA' };
+  if (ext === 'py') return { source: 'Python', target: 'FastAPI', adapterId: 'python-to-fastapi', langBadge: 'PY' };
+  if (ext === 'rb') return { source: 'Ruby', target: 'Rails', adapterId: 'ruby-to-rails', langBadge: 'RB' };
+  if (ext === 'vue') return { source: 'Vue.js', target: 'React', adapterId: 'vue-to-react', langBadge: 'VUE' };
+  if (ext === 'ts' || ext === 'tsx') return { source: 'Angular', target: 'React', adapterId: 'angular-to-react', langBadge: 'TS' };
+
+  if (code) {
+    if (code.includes('<?php')) return { source: 'PHP', target: 'Laravel', adapterId: 'php-to-laravel', langBadge: 'PHP' };
+    if (code.includes('javax.servlet') || code.includes('import java') || code.includes('public class')) {
+      return { source: 'Java', target: 'Spring Boot', adapterId: 'java-to-spring', langBadge: 'JAVA' };
+    }
+    if (code.includes('def ') && code.includes('import ')) return { source: 'Python', target: 'FastAPI', adapterId: 'python-to-fastapi', langBadge: 'PY' };
+    if (code.includes('<template>') || code.includes('Vue.component')) return { source: 'Vue.js', target: 'React', adapterId: 'vue-to-react', langBadge: 'VUE' };
+    if (code.includes('@Component') || code.includes('@Injectable')) return { source: 'Angular', target: 'React', adapterId: 'angular-to-react', langBadge: 'TS' };
+  }
+
+  return { source: 'jQuery', target: 'React', adapterId: 'jquery-to-react', langBadge: 'JS' };
+}
+
 export default function CodeUploader({
   onUpload,
   onUploadProject,
@@ -79,28 +90,63 @@ export default function CodeUploader({
   error = null
 }) {
   const fileInputRef = useRef(null);
-  const [mode, setMode] = useState('single'); // 'single' | 'project'
+  const folderInputRef = useRef(null);
+  const textareaRef = useRef(null);
+  const lineNumbersRef = useRef(null);
+
+  const [inputMode, setInputMode] = useState('upload'); // 'upload' | 'paste'
   const [dragActive, setDragActive] = useState(false);
-  const [pastedCode, setPastedCode] = useState('');
+  const [validationError, setValidationError] = useState(null);
+
+  // Editor State
+  const [pastedCode, setPastedCode] = useState(SAMPLE_JQUERY_CODE);
   const [customFilename, setCustomFilename] = useState('legacy-code.js');
   const [selectedAdapterId, setSelectedAdapterId] = useState('jquery-to-react');
+  const [detectedTech, setDetectedTech] = useState({ source: 'jQuery', target: 'React', langBadge: 'JS' });
+
+  // Auto-detect technology on code or filename change
+  useEffect(() => {
+    const detected = detectLanguageLocal(pastedCode, customFilename);
+    setDetectedTech(detected);
+    if (!selectedAdapterId || selectedAdapterId === 'jquery-to-react') {
+      setSelectedAdapterId(detected.adapterId);
+    }
+  }, [pastedCode, customFilename]);
+
+  // Sync scroll between textarea and line numbers
+  const handleScroll = (e) => {
+    if (lineNumbersRef.current) {
+      lineNumbersRef.current.scrollTop = e.target.scrollTop;
+    }
+  };
+
+  const lineCount = Math.max(1, pastedCode.split('\n').length);
+  const lineNumbersArray = Array.from({ length: lineCount }, (_, i) => i + 1);
 
   const handleFile = (file) => {
     if (!file) return;
+    setValidationError(null);
     const filename = file.name;
 
     if (filename.endsWith('.zip')) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        const arrayBuffer = e.target.result;
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        const base64 = btoa(binary);
-        if (onUploadProject) {
-          onUploadProject(base64, filename, selectedAdapterId);
+        try {
+          const arrayBuffer = e.target.result;
+          const bytes = new Uint8Array(arrayBuffer);
+          let binary = '';
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          const base64 = btoa(binary);
+          if (onUploadProject) {
+            onUploadProject(base64, filename, selectedAdapterId);
+          }
+        } catch (err) {
+          setValidationError({
+            title: 'Project could not be analyzed',
+            message: 'The uploaded project appears to be incomplete, corrupted, or missing required source files. Please check the project and try again.'
+          });
         }
       };
       reader.readAsArrayBuffer(file);
@@ -108,12 +154,26 @@ export default function CodeUploader({
       const reader = new FileReader();
       reader.onload = (e) => {
         const codeContent = e.target.result || '';
-        if (codeContent.trim() && onUpload) {
+        const check = validateCodeInput(codeContent, filename);
+        if (!check.valid) {
+          setValidationError({
+            title: check.title,
+            message: check.message
+          });
+          return;
+        }
+        if (onUpload) {
           onUpload(codeContent, filename, selectedAdapterId);
         }
       };
       reader.readAsText(file);
     }
+  };
+
+  const handleFolderUpload = (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    if (files[0]) handleFile(files[0]);
   };
 
   const handleDragOver = (e) => {
@@ -144,130 +204,121 @@ export default function CodeUploader({
   };
 
   const handleLoadSample = (type) => {
+    setValidationError(null);
     if (type === 'php') {
-      onUpload(SAMPLE_PHP_CODE, 'register.php', 'php-to-laravel');
+      setPastedCode(SAMPLE_PHP_CODE);
+      setCustomFilename('register.php');
+      setSelectedAdapterId('php-to-laravel');
     } else if (type === 'java') {
-      onUpload(SAMPLE_JAVA_CODE, 'UserServlet.java', 'java-to-spring');
+      setPastedCode(SAMPLE_JAVA_CODE);
+      setCustomFilename('UserServlet.java');
+      setSelectedAdapterId('java-to-spring');
     } else {
-      onUpload(SAMPLE_JQUERY_CODE, 'legacy-signup.js', 'jquery-to-react');
+      setPastedCode(SAMPLE_JQUERY_CODE);
+      setCustomFilename('legacy-signup.js');
+      setSelectedAdapterId('jquery-to-react');
     }
   };
 
   const handleStartPasted = () => {
-    if (pastedCode.trim() && onUpload) {
+    setValidationError(null);
+    const check = validateCodeInput(pastedCode, customFilename);
+    if (!check.valid) {
+      setValidationError({
+        title: check.title,
+        message: check.message
+      });
+      return;
+    }
+
+    if (onUpload) {
       onUpload(pastedCode, customFilename || 'legacy-code.js', selectedAdapterId);
     }
   };
 
+  const handleClear = () => {
+    setValidationError(null);
+    setPastedCode('');
+  };
+
+  const activeError = validationError || (error ? { title: 'Migration Error', message: error } : null);
+
   return (
-    <div className="bg-[#0c1219] border border-[#1c2e38] rounded-2xl p-8 max-w-6xl mx-auto shadow-2xl space-y-6">
-      {/* Title & Subtitle */}
-      <div className="text-center space-y-2 pb-4 border-b border-[#1c2e38]">
-        <h2 className="text-2xl font-extrabold text-white tracking-wide font-mono">
-          What are you modernizing?
+    <div className="max-w-4xl mx-auto py-6 space-y-6 font-sans">
+      {/* HERO TITLE & SUBTITLE */}
+      <div className="text-center space-y-2">
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight font-mono uppercase">
+          MODERNIZE YOUR LEGACY PROJECT
         </h2>
-        <p className="text-xs text-slate-400">
-          Choose a single file or upload a complete legacy project archive (.zip)
+        <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto">
+          Upload your project or paste legacy source code.
         </p>
       </div>
 
-      {/* Migration Path Selector */}
-      <div className="bg-[#070a0e] border border-[#1c2e38] p-4 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
-        <label className="font-bold text-slate-200 flex items-center gap-2 font-mono">
-          <Layers className="w-4 h-4 text-[#10b981]" />
-          <span>Select Migration Path:</span>
-        </label>
-        <select
-          value={selectedAdapterId}
-          onChange={(e) => setSelectedAdapterId(e.target.value)}
-          className="bg-[#0c1219] border border-[#1c2e38] rounded-lg px-3 py-1.5 text-xs text-[#10b981] font-mono font-bold focus:outline-none focus:border-[#10b981]"
-        >
-          <optgroup label="Web Stack">
-            <option value="jquery-to-react">jQuery → React</option>
-            <option value="vue-to-react">Vue.js → React</option>
-            <option value="angular-to-react">Angular → React</option>
-          </optgroup>
-          <optgroup label="Backend Stack">
-            <option value="php-to-laravel">PHP → Laravel</option>
-            <option value="java-to-spring">Java → Spring Boot</option>
-            <option value="python-to-fastapi">Python → FastAPI</option>
-            <option value="ruby-to-rails">Ruby → Rails</option>
-          </optgroup>
-          <optgroup label="Mobile Stack">
-            <option value="android-java-to-kotlin">Android Java → Kotlin</option>
-            <option value="react-native-modernization">React Native Modernization</option>
-            <option value="legacy-mobile">Cordova → React Native</option>
-          </optgroup>
-          <optgroup label="Data & API Stack">
-            <option value="schema-modernization">MySQL DDL → PostgreSQL Prisma</option>
-            <option value="database-migration">SQL Dump → Knex.js Migration</option>
-            <option value="api-modernization">SOAP WSDL → OpenAPI 3.0 REST</option>
-          </optgroup>
-          <optgroup label="Infrastructure Stack">
-            <option value="infrastructure-modernization">Shell Script → Kubernetes Manifests</option>
-            <option value="legacy-cloud-config">CloudFormation → Terraform IaC</option>
-          </optgroup>
-        </select>
-      </div>
-
-      {/* Two Ingestion Columns (LEFT: File/ZIP Upload, RIGHT: Code Paste) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* LEFT COLUMN: PROJECT / FILE UPLOAD */}
-        <div className="bg-[#070a0e] border border-[#1c2e38] rounded-xl p-5 flex flex-col space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[#1c2e38]">
-            <span className="text-xs font-bold text-slate-200 font-mono uppercase tracking-wider flex items-center gap-2">
-              <FolderArchive className="w-4 h-4 text-[#10b981]" />
-              PROJECT / FILE UPLOAD
-            </span>
-
-            <div className="flex items-center space-x-1 bg-[#0c1219] p-1 rounded-lg border border-[#1c2e38] text-[11px] font-mono">
-              <button
-                type="button"
-                onClick={() => setMode('single')}
-                className={`px-2.5 py-1 rounded transition-colors font-bold ${
-                  mode === 'single' ? 'bg-[#1c2e38] text-[#10b981]' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Single File
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode('project')}
-                className={`px-2.5 py-1 rounded transition-colors font-bold ${
-                  mode === 'project' ? 'bg-[#1c2e38] text-[#10b981]' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Upload .zip
-              </button>
-            </div>
-          </div>
-
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all flex-1 min-h-[220px] ${
-              dragActive
-                ? 'border-[#10b981] bg-[#10b981]/10'
-                : 'border-[#1c2e38] bg-[#0c1219]/60 hover:border-[#10b981]/50 hover:bg-[#0c1219]'
+      {/* SEGMENTED CONTROL / TABS: [ Upload Project ] [ Paste Code ] */}
+      <div className="flex items-center justify-center">
+        <div className="inline-flex items-center bg-[#0c1219] p-1.5 rounded-xl border border-[#1c2e38] text-xs font-mono font-bold shadow-lg">
+          <button
+            type="button"
+            onClick={() => { setValidationError(null); setInputMode('upload'); }}
+            className={`px-5 py-2 rounded-lg transition-all flex items-center space-x-2 ${
+              inputMode === 'upload'
+                ? 'bg-[#1c2e38] text-[#10b981] shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <div className="p-3 rounded-2xl bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981] mb-3">
-              {mode === 'project' ? <FolderArchive className="w-8 h-8" /> : <FileCode className="w-8 h-8" />}
-            </div>
+            <FolderArchive className="w-4 h-4" />
+            <span>Upload Project</span>
+          </button>
 
-            <h4 className="text-xs font-bold text-slate-200 mb-1 font-mono">
-              Drag & Drop your legacy {mode === 'project' ? 'project ZIP' : 'file'} here
-            </h4>
-            <p className="text-[11px] text-slate-400 max-w-xs mb-4">
-              We'll analyze your code and identify modernization opportunities automatically.
-            </p>
+          <button
+            type="button"
+            onClick={() => { setValidationError(null); setInputMode('paste'); }}
+            className={`px-5 py-2 rounded-lg transition-all flex items-center space-x-2 ${
+              inputMode === 'paste'
+                ? 'bg-[#1c2e38] text-[#10b981] shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Code2 className="w-4 h-4" />
+            <span>Paste Code</span>
+          </button>
+        </div>
+      </div>
 
+      {/* ========================================================
+          OPTION 1 — UPLOAD PROJECT VIEW
+         ======================================================== */}
+      {inputMode === 'upload' && (
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          className={`border-2 border-dashed rounded-2xl p-12 sm:p-16 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 ${
+            dragActive
+              ? 'border-[#10b981] bg-[#10b981]/10 scale-[1.01]'
+              : 'border-[#1c2e38] bg-[#0c1219] hover:border-[#10b981]/60 hover:bg-[#0e1721]'
+          }`}
+        >
+          <div className="p-4 rounded-2xl bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981] mb-4">
+            <FolderArchive className="w-10 h-10 stroke-[1.5]" />
+          </div>
+
+          <h3 className="text-base sm:text-lg font-bold text-white mb-1 font-mono">
+            Upload your project
+          </h3>
+
+          <p className="text-xs text-slate-400 max-w-md mb-6 font-mono">
+            Drop ZIP or project folder here
+          </p>
+
+          <div className="flex items-center space-x-3" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               disabled={isProcessing}
-              className="bg-[#10b981] hover:bg-emerald-400 text-slate-950 text-xs font-bold font-mono px-5 py-2.5 rounded-xl shadow-lg transition-all flex items-center space-x-2"
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-[#10b981] hover:bg-emerald-400 text-slate-950 font-mono font-bold text-xs px-6 py-3 rounded-xl transition-all shadow-lg flex items-center space-x-2"
             >
               <Upload className="w-4 h-4 stroke-[2.5]" />
               <span>Browse Files</span>
@@ -276,95 +327,174 @@ export default function CodeUploader({
             <input
               ref={fileInputRef}
               type="file"
-              accept={mode === 'project' ? '.zip' : '*/*'}
+              accept=".zip, .js, .jsx, .ts, .tsx, .php, .java, .py, .rb, .sql, .kt, .cs, .json, .xml, */*"
               onChange={handleFileInputChange}
+              className="hidden"
+            />
+
+            <input
+              ref={folderInputRef}
+              type="file"
+              webkitdirectory="true"
+              directory="true"
+              onChange={handleFolderUpload}
               className="hidden"
             />
           </div>
         </div>
+      )}
 
-        {/* RIGHT COLUMN: PASTE LEGACY CODE */}
-        <div className="bg-[#070a0e] border border-[#1c2e38] rounded-xl p-5 flex flex-col space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[#1c2e38]">
-            <span className="text-xs font-bold text-slate-200 font-mono uppercase tracking-wider flex items-center gap-2">
-              <Code className="w-4 h-4 text-amber-400" />
-              PASTE LEGACY CODE
-            </span>
-            <input
-              type="text"
-              value={customFilename}
-              onChange={(e) => setCustomFilename(e.target.value)}
-              placeholder="filename (e.g. app.js / script.php)"
-              className="bg-[#0c1219] border border-[#1c2e38] rounded px-2 py-0.5 text-[11px] text-slate-200 font-mono focus:outline-none focus:border-[#10b981]"
-            />
-          </div>
+      {/* ========================================================
+          OPTION 2 — PASTE CODE VIEW (LINE-NUMBERED CODE EDITOR)
+         ======================================================== */}
+      {inputMode === 'paste' && (
+        <div className="space-y-4 font-mono">
+          <div className="bg-[#0c1219] border border-[#1c2e38] rounded-2xl overflow-hidden shadow-2xl space-y-0">
+            {/* EDITOR HEADER */}
+            <div className="bg-[#070a0e] px-4 py-3 border-b border-[#1c2e38] flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center space-x-3">
+                <span className="font-bold text-slate-300 uppercase tracking-wider text-[11px]">
+                  LEGACY SOURCE
+                </span>
+                <span className="text-slate-600">|</span>
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-slate-400 text-[11px]">Filename:</span>
+                  <input
+                    type="text"
+                    value={customFilename}
+                    onChange={(e) => { setValidationError(null); setCustomFilename(e.target.value); }}
+                    placeholder="legacy-code.js"
+                    className="bg-[#0c1219] border border-[#1c2e38] rounded px-2 py-0.5 text-xs text-slate-200 focus:outline-none focus:border-[#10b981] w-36"
+                  />
+                </div>
+              </div>
 
-          <div className="flex-1 flex flex-col space-y-3">
-            <textarea
-              value={pastedCode}
-              onChange={(e) => setPastedCode(e.target.value)}
-              placeholder="// Paste your legacy code here..."
-              rows={8}
-              spellCheck={false}
-              className="w-full flex-1 bg-[#0c1219] border border-[#1c2e38] rounded-xl p-3 font-mono text-xs text-slate-200 resize-none focus:outline-none focus:border-[#10b981]/50"
-            />
+              {/* Language Badge & Stack Preset Selector */}
+              <div className="flex items-center space-x-3">
+                <span className="bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/20 font-bold px-2 py-0.5 rounded text-[10px]">
+                  {detectedTech.langBadge}
+                </span>
 
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={handleStartPasted}
-                disabled={!pastedCode.trim() || isProcessing}
-                className="bg-[#10b981] hover:bg-emerald-400 disabled:opacity-40 text-slate-950 text-xs font-bold font-mono px-5 py-2.5 rounded-xl transition-all flex items-center space-x-2 shadow-lg"
+                <select
+                  value={selectedAdapterId}
+                  onChange={(e) => setSelectedAdapterId(e.target.value)}
+                  className="bg-[#0c1219] border border-[#1c2e38] rounded px-2.5 py-1 text-xs text-[#10b981] font-bold focus:outline-none focus:border-[#10b981]"
+                >
+                  <optgroup label="Web Stack">
+                    <option value="jquery-to-react">jQuery → React</option>
+                    <option value="vue-to-react">Vue.js → React</option>
+                    <option value="angular-to-react">Angular → React</option>
+                  </optgroup>
+                  <optgroup label="Backend Stack">
+                    <option value="php-to-laravel">PHP → Laravel</option>
+                    <option value="java-to-spring">Java → Spring Boot</option>
+                    <option value="python-to-fastapi">Python → FastAPI</option>
+                    <option value="ruby-to-rails">Ruby → Rails</option>
+                  </optgroup>
+                  <optgroup label="Mobile Stack">
+                    <option value="android-java-to-kotlin">Android Java → Kotlin</option>
+                    <option value="react-native-modernization">React Native Modernization</option>
+                    <option value="legacy-mobile">Cordova → React Native</option>
+                  </optgroup>
+                </select>
+              </div>
+            </div>
+
+            {/* EDITOR BODY WITH LINE NUMBERS & SCROLLING */}
+            <div className="relative flex bg-[#070a0e] min-h-[280px] max-h-[460px] text-xs">
+              {/* Line Numbers Column */}
+              <div
+                ref={lineNumbersRef}
+                className="select-none py-3 pl-3 pr-2 bg-[#0c1219] text-slate-600 border-r border-[#1c2e38] text-right font-mono leading-relaxed overflow-hidden shrink-0 min-w-[40px]"
               >
-                <span>Start Modernizing</span>
-                <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-              </button>
+                {lineNumbersArray.map((num) => (
+                  <div key={num} className="leading-6">{num}</div>
+                ))}
+              </div>
+
+              {/* Editable Textarea */}
+              <textarea
+                ref={textareaRef}
+                value={pastedCode}
+                onChange={(e) => { setValidationError(null); setPastedCode(e.target.value); }}
+                onScroll={handleScroll}
+                placeholder="// Paste or type legacy source code here..."
+                spellCheck={false}
+                rows={12}
+                className="w-full flex-1 bg-transparent p-3 text-slate-200 font-mono leading-6 resize-none focus:outline-none overflow-auto border-none select-text selection:bg-[#10b981]/30"
+              />
+            </div>
+
+            {/* EDITOR FOOTER / STATUS & ACTIONS */}
+            <div className="bg-[#070a0e] px-4 py-3 border-t border-[#1c2e38] flex flex-wrap items-center justify-between gap-3 text-xs">
+              {/* Detected Language Indicator */}
+              <div className="flex items-center space-x-2 text-slate-400">
+                <span>Detected: <strong className="text-slate-200">{detectedTech.source}</strong></span>
+                <span>→</span>
+                <span>Target: <strong className="text-[#10b981]">{detectedTech.target}</strong></span>
+              </div>
+
+              {/* Sample Loader Helpers & Clear / Start Modernization Buttons */}
+              <div className="flex items-center space-x-3">
+                <div className="hidden sm:flex items-center space-x-1 border-r border-[#1c2e38] pr-3 text-[11px] text-slate-500">
+                  <span>Samples:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleLoadSample('jquery')}
+                    className="hover:text-amber-400 px-1 font-bold"
+                  >
+                    jQuery
+                  </button>
+                  <span>•</span>
+                  <button
+                    type="button"
+                    onClick={() => handleLoadSample('php')}
+                    className="hover:text-purple-400 px-1 font-bold"
+                  >
+                    PHP
+                  </button>
+                  <span>•</span>
+                  <button
+                    type="button"
+                    onClick={() => handleLoadSample('java')}
+                    className="hover:text-sky-400 px-1 font-bold"
+                  >
+                    Java
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  className="bg-[#111a22] hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-[#1c2e38] px-3 py-1.5 rounded-lg transition-colors flex items-center space-x-1 font-bold"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleStartPasted}
+                  disabled={isProcessing}
+                  className="bg-[#10b981] hover:bg-emerald-400 disabled:opacity-40 text-slate-950 font-bold px-5 py-2 rounded-xl transition-all shadow-lg flex items-center space-x-2"
+                >
+                  <span>Start Modernization</span>
+                  <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Quick Sample Loaders */}
-      <div className="flex items-center justify-between bg-[#070a0e] p-3 rounded-xl border border-[#1c2e38] text-xs font-mono">
-        <span className="text-slate-400 font-semibold">Or test with realistic legacy fixtures:</span>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => handleLoadSample('jquery')}
-            type="button"
-            disabled={isProcessing}
-            className="text-[11px] bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-bold px-3 py-1.5 rounded border border-amber-500/20 transition-all flex items-center space-x-1"
-          >
-            <Sparkles className="w-3 h-3" />
-            <span>jQuery Cart</span>
-          </button>
-
-          <button
-            onClick={() => handleLoadSample('php')}
-            type="button"
-            disabled={isProcessing}
-            className="text-[11px] bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 font-bold px-3 py-1.5 rounded border border-purple-500/20 transition-all flex items-center space-x-1"
-          >
-            <Server className="w-3 h-3" />
-            <span>PHP Script</span>
-          </button>
-
-          <button
-            onClick={() => handleLoadSample('java')}
-            type="button"
-            disabled={isProcessing}
-            className="text-[11px] bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 font-bold px-3 py-1.5 rounded border border-sky-500/20 transition-all flex items-center space-x-1"
-          >
-            <Cpu className="w-3 h-3" />
-            <span>Java Servlet</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Error Banner if Any */}
-      {error && (
-        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-start space-x-2 text-xs text-rose-300 font-mono">
-          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-          <span>{error}</span>
+      {/* USER-FRIENDLY ERROR BANNER */}
+      {activeError && (
+        <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-500/40 text-xs text-amber-200 font-mono space-y-1 shadow-lg">
+          <div className="flex items-center space-x-2 font-bold text-amber-400 text-sm">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>⚠ {activeError.title}</span>
+          </div>
+          <p className="text-slate-300 leading-relaxed font-sans">{activeError.message}</p>
         </div>
       )}
     </div>
