@@ -286,7 +286,13 @@ router.post('/run', async (req, res) => {
     await delay(200);
 
     const detection = detectTechnology(sessionCode, sessionFilename);
-    const selectedAdapterId = adapterId || detection.primaryAdapterId;
+
+    // Prioritize detected technology adapter unless user explicitly selected a non-default custom target
+    let selectedAdapterId = detection.primaryAdapterId;
+    if (adapterId && adapterId !== 'jquery-to-react' && adapterId !== 'auto') {
+      selectedAdapterId = adapterId;
+    }
+
     const adapter = migrationRegistry.getAdapter(selectedAdapterId);
 
     emitEvent('detect:complete', {

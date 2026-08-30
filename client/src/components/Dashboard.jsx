@@ -582,11 +582,19 @@ export default function Dashboard() {
   const legacySafety = calculateLegacySafetyScore(session.analysis);
   const modernSafety = calculateModernSafetyScore(session);
 
-  const activeSourceTech = session.selectedAdapter?.source || session.analysis?.technology || 'jQuery';
-  const activeTargetTech = session.selectedAdapter?.target || session.analysis?.target || 'React';
+  const activeSourceTech = session.analysis?.stackDetection?.migrations && session.analysis.stackDetection.migrations.length > 0
+    ? session.analysis.stackDetection.migrations.map(m => m.source).join(' + ')
+    : session.selectedAdapter?.source || session.analysis?.technology || 'jQuery';
 
-  // Number of files
+  const activeTargetTech = session.analysis?.stackDetection?.migrations && session.analysis.stackDetection.migrations.length > 0
+    ? session.analysis.stackDetection.migrations.map(m => m.target).join(' + ')
+    : session.selectedAdapter?.target || session.analysis?.target || 'React';
+
+  // File stats
   const fileCount = session.analysis?.inventory?.totalFiles || (session.projectDiff ? session.projectDiff.length : 1);
+  const totalAnalyzed = session.analysis?.inventory?.totalFiles || (session.projectDiff ? session.projectDiff.length : 1);
+  const totalModernized = session.projectDiff ? session.projectDiff.length : (session.migratedCode ? 1 : totalAnalyzed);
+  const totalPreserved = Math.max(0, totalAnalyzed - totalModernized);
 
   // Check if reliable architecture analysis exists
   const hasReliableArchitecture = !!(session.analysis && (session.analysis.architecture || session.analysis.dependencyGraph));
@@ -1027,19 +1035,23 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      {/* Small statistics */}
-                      <div className="grid grid-cols-3 gap-3 text-center border-t border-[#1c2e38] pt-4 text-slate-300">
+                      {/* Project statistics */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center border-t border-[#1c2e38] pt-4 text-slate-300">
                         <div>
                           <span className="text-slate-500 block text-[10px]">FILES ANALYZED</span>
-                          <span className="font-bold text-sm text-white">{fileCount}</span>
+                          <span className="font-bold text-sm text-white">{totalAnalyzed}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[10px]">FILES MODERNIZED</span>
+                          <span className="font-bold text-sm text-[#10b981]">{totalModernized}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[10px]">FILES PRESERVED</span>
+                          <span className="font-bold text-sm text-sky-400">{totalPreserved}</span>
                         </div>
                         <div>
                           <span className="text-slate-500 block text-[10px]">MIGRATION SAFETY</span>
                           <span className="font-bold text-sm text-[#10b981]">{modernSafety.totalScore} / 100</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block text-[10px]">SELF-REPAIR ATTEMPTS</span>
-                          <span className="font-bold text-sm text-sky-400">{session.repairAttempts}</span>
                         </div>
                       </div>
                     </div>

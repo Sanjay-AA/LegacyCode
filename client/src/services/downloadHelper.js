@@ -9,23 +9,28 @@ export function downloadModernizedProject(session) {
 
   // If we have a multi-file project diff
   if (projectDiff && Array.isArray(projectDiff) && projectDiff.length > 0) {
-    // Generate combined bundle or iterate files
     projectDiff.forEach(fileItem => {
       if (fileItem.content || fileItem.code || fileItem.migratedContent) {
         const fileContent = fileItem.content || fileItem.code || fileItem.migratedContent;
-        const name = fileItem.filename || fileItem.path || 'migrated-file.js';
+        const name = fileItem.filename || fileItem.path || 'migrated-file';
         triggerDownload(name, fileContent);
       }
     });
     return;
   }
 
-  // Single file download
+  // Single file download with correct extension preservation
   if (migratedCode) {
     let outputFilename = filename ? `modernized-${filename}` : `${componentName || 'MigratedComponent'}.jsx`;
-    if (!outputFilename.endsWith('.jsx') && !outputFilename.endsWith('.js') && !outputFilename.endsWith('.tsx') && !outputFilename.endsWith('.ts')) {
+    const ext = (filename || '').split('.').pop().toLowerCase();
+
+    // Preserve non-JS file extensions for Java, PHP, Python, Ruby, SQL, Shell, Kotlin, etc.
+    if (['java', 'php', 'py', 'rb', 'sql', 'sh', 'kt', 'cs', 'prisma', 'json', 'yaml', 'tf'].includes(ext)) {
+      outputFilename = filename ? `modernized-${filename}` : `${componentName || 'MigratedModule'}.${ext}`;
+    } else if (!outputFilename.endsWith('.jsx') && !outputFilename.endsWith('.js') && !outputFilename.endsWith('.tsx') && !outputFilename.endsWith('.ts')) {
       outputFilename += '.jsx';
     }
+
     triggerDownload(outputFilename, migratedCode);
   }
 }
